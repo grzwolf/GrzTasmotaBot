@@ -38,8 +38,10 @@ GrzTasmotaBot contains the described Telegram bot and takes care about the messa
 
 # Limitations (2024/01/19)
 a) device types
+
 Currently only Tasmota socket devices are supported by their basic commands: On, Off and Status.
 The supported devices are listed in the file TasmotaSockets.txt, which could easily be amended.
 
 b) NOUS A1T
+
 Since I only own 'NOUS A1T' sockets, there was no further testing of other socket devices.
