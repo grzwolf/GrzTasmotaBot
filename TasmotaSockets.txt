@@ -1,0 +1,72 @@
+NOUS A1T
+Sonoff Basic
+Sonoff RF
+Sonoff TH
+Sonoff Dual
+Sonoff Dual R2
+Sonoff Pow
+Sonoff Pow R2
+Sonoff 4CH
+Sonoff 4CH Pro
+Sonoff S31
+Sonoff S2X
+Sonoff Touch
+Sonoff T1 1CH
+Sonoff T1 2CH
+Sonoff T1 3CH
+Sonoff D1
+Sonoff LED
+Sonoff BN-SZ
+Sonoff L1
+Sonoff B1
+Sonoff SC
+Sonoff iFan02
+Sonoff iFan03
+Sonoff Bridge
+Sonoff SV
+Sonoff Dev
+1 Channel
+4 Channel
+Motor C/AC
+ElectroDragon
+EXS Relay(s)
+Supla Espablo
+Luani HVIO
+Yunshan Relay
+WiOn
+Shelly 1
+Shelly 2
+BlitzWolf SHP
+Teckin
+Teckin US
+AplicWDP303075
+Gosund SP1 v23
+Luminea ZX2820
+SK03 Outdoor
+Digoo DG-SP202
+KA10
+SP10
+WAGA CHCZ02MB
+Neo Coolcam
+OBI Socket
+OBI Socket 2
+Manzoku strip
+ESP Switch
+Tuya MCU
+ARMTR Dimmer
+PS-16-DZ
+EXS Dimmer
+PWM Dimmer
+H801
+MagicHome
+Arilux LC01
+Arilux LC06
+Arilux LC11
+Zengge WF017
+Huafan SS
+Mi Desk Lamp
+KMC 70011
+AiLight
+Xiaomi Philips
+SYF05
+YTF IR Bridge
