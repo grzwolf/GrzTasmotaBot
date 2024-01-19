@@ -34,7 +34,7 @@ GrzTasmotaBot contains the described Telegram bot and takes care about the messa
 - you may add more whitelist members
 - set GrzTasmotaBot -> Settings -> UseTelegramWhitelist to True
 - GrzTasmotaBot -> System Menu --> "Send 'test' to 1st whitelist entry" to check if above format is ok
-- Note: if UseTelegramWhitelist is enabled and the whitelist ist empty or in wrong format, the bot won't work 
+- Note: if UseTelegramWhitelist is enabled and the whitelist is empty or in wrong format, the bot won't work 
 
 # Limitations (2024/01/19)
 a) device types
