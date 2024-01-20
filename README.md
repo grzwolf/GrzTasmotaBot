@@ -28,9 +28,9 @@ GrzTasmotaBot contains the described Telegram bot and takes care about the messa
 
 # GrzTasmotaBot Configuration - optional whitelist
 - send /help from you phone's Telegram messenger to the above created bot
-- GrzTasmotaBot -> Messages Logger will show the sender: <timestamp> RX '/help' from: <sender>
-- set GrzTasmotaBot -> Settings -> 'Telegram whitelist' in the following format: name,<sender>
-- Note: the COMMA between the name and the <sender> is essential !!
+- GrzTasmotaBot -> Messages Logger will show the sender (usually 9 numbers): TIMESTAMP RX '/help' from: SENDER
+- set GrzTasmotaBot -> Settings -> 'Telegram whitelist' in the following format: name,SENDER
+- Note: the COMMA between the name and the SENDER is essential !!
 - you may add more whitelist members
 - set GrzTasmotaBot -> Settings -> UseTelegramWhitelist to True
 - GrzTasmotaBot -> System Menu --> "Send 'test' to 1st whitelist entry" to check if above format is ok
@@ -45,3 +45,6 @@ The supported devices are listed in the file TasmotaSockets.txt, which could eas
 b) NOUS A1T
 
 Since I only own 'NOUS A1T' sockets, there was no further testing of other socket devices.
+
+# Build yourself
+Download sources, open project in Visual Studio, build --> profit.
