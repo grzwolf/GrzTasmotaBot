@@ -14,9 +14,9 @@ a Telegram bot running on a PC in your local network.
 Such Telegram bot acts as an interface between your phone and your Tasmota socket devices.
 GrzTasmotaBot contains the described Telegram bot and takes care about the messages conversion quirks.
 
-# GrzTasmotaBot Instalation
+# GrzTasmotaBot Installation
 - have a Windows PC running 24/7, even Atom Z8350 consuming <8 W (headless) is fine
-- download & extract the latest ExecutableFilesFolder.zip from Release tag
+- download & extract the latest ExecutableFilesFolder.zip from Releases -> tags
 - simply copy ALL files from ExecutableFilesFolder.zip into a folder of your choice
 - run GrzTasmotaBot.exe
 
