@@ -37,6 +37,7 @@ namespace GrzTasmotaBot {
         int _telegramOnErrorCount = 0;                                // error handling
         int _telegramLiveTickErrorCount = 0;                          // error handling 
         bool _runPing = false;                                        // error handling
+        int _telegramRestartCounter = 0;                              // error handling
 
         public MainForm() {
 
@@ -537,6 +538,40 @@ namespace GrzTasmotaBot {
             }));
         }
 
+        // try to restart Telegram, if it should run but it doesn't due to an internal fail
+        private void timerTelegramRestart_Tick(object sender, EventArgs e) {
+            // stop timerTelegramRestart
+            this.timerTelegramRestart.Stop();
+            // limit app restarts
+            if ( Settings.UseTelegramBot && _Bot == null && Settings.TelegramRestartAppCount < 5 ) {
+                // restart app after too many failing Telegram restarts in the current app session
+                if ( _telegramRestartCounter > 5 ) {
+                    // set flag, that this is not an app crash
+                    AppSettings.IniFile ini = new AppSettings.IniFile(System.Windows.Forms.Application.ExecutablePath + ".ini");
+                    ini.IniWriteValue("GrzTasmotaBot", "AppCrash", "False");
+                    // memorize count of Telegram malfunctions forcing an app restart: needed to avoid restart loops
+                    Settings.TelegramRestartAppCount++;
+                    ini.IniWriteValue("GrzTasmotaBot", "TelegramRestartAppCount", Settings.TelegramRestartAppCount.ToString());
+                    Logger.logTextLnU(DateTime.Now, String.Format("timerTelegramRestart_Tic: Telegram restart count > 5, now restarting GrzTasmotaBot"));
+                    // restart GrzTasmotaBot: if Telegram restart count in session > 5, then restart app (usual max. 2 over months)
+                    string exeName = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
+                    ProcessStartInfo startInfo = new ProcessStartInfo(exeName);
+                    try {
+                        System.Diagnostics.Process.Start(startInfo);
+                        this.Close();
+                    } catch ( Exception ) {; }
+                } else {
+                    // restart Telegram
+                    _telegramRestartCounter++;
+                    Logger.logTextLnU(DateTime.Now, String.Format("timerFlowControl_Tick: Telegram restart #{0} of 5", _telegramRestartCounter));
+                    _telegramOnErrorCount = 0;
+                    _Bot = new TeleSharp.TeleSharp(Settings.BotAuthenticationToken);
+                    _Bot.OnMessage += OnMessage;
+                    _Bot.OnError += OnError;
+                    _Bot.OnLiveTick += OnLiveTick;
+                }
+            }
+        }
         // Telegram connector provides a live tick info, this timer tick shall act, if Telegram live tick info fails multiple times
         private void timerCheckTelegramLiveTick_Tick(object sender, EventArgs e) {
             if ( _Bot != null ) {
@@ -594,7 +629,8 @@ namespace GrzTasmotaBot {
                 _Bot.OnLiveTick -= OnLiveTick;
                 _Bot.Stop();
                 _Bot = null;
-                Logger.logTextLnU(DateTime.Now, "OnError: Telegram connect error, now shut down");
+                Logger.logTextLnU(DateTime.Now, "OnError: Telegram connect error, now shut down - trying to restart in 5 min");
+                this.timerTelegramRestart.Start();
             } else {
                 Logger.logTextLnU(DateTime.Now, "OnError: _Bot == null, but OnError still active");
             }

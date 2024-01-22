@@ -26,32 +26,33 @@ namespace GrzTasmotaBot {
         private void InitializeComponent() {
             this.components = new System.ComponentModel.Container();
             this.tabPageOverview = new System.Windows.Forms.TabPage();
+            this.tableLayoutPanelMain = new System.Windows.Forms.TableLayoutPanel();
             this.groupBoxLogger = new System.Windows.Forms.GroupBox();
             this.buttonClearLogger = new System.Windows.Forms.Button();
             this.textBoxLogger = new System.Windows.Forms.TextBox();
-            this.comboBoxTasmotaDevices = new System.Windows.Forms.ComboBox();
             this.groupBoxTasmotaSockets = new System.Windows.Forms.GroupBox();
             this.labelSocket = new System.Windows.Forms.Label();
             this.buttonSocketStatus = new System.Windows.Forms.Button();
             this.buttonSocketOff = new System.Windows.Forms.Button();
             this.buttonSocketOn = new System.Windows.Forms.Button();
             this.buttonSettings = new System.Windows.Forms.Button();
+            this.groupBoxAllTasmotas = new System.Windows.Forms.GroupBox();
+            this.comboBoxTasmotaDevices = new System.Windows.Forms.ComboBox();
+            this.buttonSearchTasmotas = new System.Windows.Forms.Button();
             this.statusStripMain = new System.Windows.Forms.StatusStrip();
             this.toolStripProgressBarMain = new System.Windows.Forms.ToolStripProgressBar();
             this.toolStripStatusLabelMain = new System.Windows.Forms.ToolStripStatusLabel();
-            this.buttonSearchTasmotas = new System.Windows.Forms.Button();
             this.tabControlDevices = new System.Windows.Forms.TabControl();
             this.timerCheckTelegramLiveTick = new System.Windows.Forms.Timer(this.components);
             this.timerFakeProgress = new System.Windows.Forms.Timer(this.components);
-            this.tableLayoutPanelMain = new System.Windows.Forms.TableLayoutPanel();
-            this.groupBoxAllTasmotas = new System.Windows.Forms.GroupBox();
+            this.timerTelegramRestart = new System.Windows.Forms.Timer(this.components);
             this.tabPageOverview.SuspendLayout();
+            this.tableLayoutPanelMain.SuspendLayout();
             this.groupBoxLogger.SuspendLayout();
             this.groupBoxTasmotaSockets.SuspendLayout();
+            this.groupBoxAllTasmotas.SuspendLayout();
             this.statusStripMain.SuspendLayout();
             this.tabControlDevices.SuspendLayout();
-            this.tableLayoutPanelMain.SuspendLayout();
-            this.groupBoxAllTasmotas.SuspendLayout();
             this.SuspendLayout();
             // 
             // tabPageOverview
@@ -65,6 +66,26 @@ namespace GrzTasmotaBot {
             this.tabPageOverview.TabIndex = 0;
             this.tabPageOverview.Text = "Overview";
             this.tabPageOverview.UseVisualStyleBackColor = true;
+            // 
+            // tableLayoutPanelMain
+            // 
+            this.tableLayoutPanelMain.ColumnCount = 2;
+            this.tableLayoutPanelMain.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 50F));
+            this.tableLayoutPanelMain.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 50F));
+            this.tableLayoutPanelMain.Controls.Add(this.buttonSettings, 0, 0);
+            this.tableLayoutPanelMain.Controls.Add(this.groupBoxTasmotaSockets, 0, 2);
+            this.tableLayoutPanelMain.Controls.Add(this.groupBoxLogger, 0, 3);
+            this.tableLayoutPanelMain.Controls.Add(this.groupBoxAllTasmotas, 0, 1);
+            this.tableLayoutPanelMain.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.tableLayoutPanelMain.Location = new System.Drawing.Point(3, 3);
+            this.tableLayoutPanelMain.Name = "tableLayoutPanelMain";
+            this.tableLayoutPanelMain.RowCount = 4;
+            this.tableLayoutPanelMain.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 45F));
+            this.tableLayoutPanelMain.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 120F));
+            this.tableLayoutPanelMain.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 95F));
+            this.tableLayoutPanelMain.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
+            this.tableLayoutPanelMain.Size = new System.Drawing.Size(710, 460);
+            this.tableLayoutPanelMain.TabIndex = 11;
             // 
             // groupBoxLogger
             // 
@@ -100,16 +121,6 @@ namespace GrzTasmotaBot {
             this.textBoxLogger.Size = new System.Drawing.Size(698, 136);
             this.textBoxLogger.TabIndex = 9;
             this.textBoxLogger.WordWrap = false;
-            // 
-            // comboBoxTasmotaDevices
-            // 
-            this.comboBoxTasmotaDevices.Dock = System.Windows.Forms.DockStyle.Top;
-            this.comboBoxTasmotaDevices.FormattingEnabled = true;
-            this.comboBoxTasmotaDevices.Location = new System.Drawing.Point(3, 16);
-            this.comboBoxTasmotaDevices.Name = "comboBoxTasmotaDevices";
-            this.comboBoxTasmotaDevices.Size = new System.Drawing.Size(623, 21);
-            this.comboBoxTasmotaDevices.TabIndex = 7;
-            this.comboBoxTasmotaDevices.SelectedIndexChanged += new System.EventHandler(this.comboBoxTasmotaDevices_SelectedIndexChanged);
             // 
             // groupBoxTasmotaSockets
             // 
@@ -175,6 +186,40 @@ namespace GrzTasmotaBot {
             this.buttonSettings.UseVisualStyleBackColor = true;
             this.buttonSettings.Click += new System.EventHandler(this.buttonSettings_Click);
             // 
+            // groupBoxAllTasmotas
+            // 
+            this.tableLayoutPanelMain.SetColumnSpan(this.groupBoxAllTasmotas, 2);
+            this.groupBoxAllTasmotas.Controls.Add(this.comboBoxTasmotaDevices);
+            this.groupBoxAllTasmotas.Controls.Add(this.buttonSearchTasmotas);
+            this.groupBoxAllTasmotas.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.groupBoxAllTasmotas.Location = new System.Drawing.Point(3, 48);
+            this.groupBoxAllTasmotas.Name = "groupBoxAllTasmotas";
+            this.groupBoxAllTasmotas.Size = new System.Drawing.Size(704, 114);
+            this.groupBoxAllTasmotas.TabIndex = 3;
+            this.groupBoxAllTasmotas.TabStop = false;
+            this.groupBoxAllTasmotas.Text = "All Tasmota Devices";
+            // 
+            // comboBoxTasmotaDevices
+            // 
+            this.comboBoxTasmotaDevices.Dock = System.Windows.Forms.DockStyle.Top;
+            this.comboBoxTasmotaDevices.FormattingEnabled = true;
+            this.comboBoxTasmotaDevices.Location = new System.Drawing.Point(3, 16);
+            this.comboBoxTasmotaDevices.Name = "comboBoxTasmotaDevices";
+            this.comboBoxTasmotaDevices.Size = new System.Drawing.Size(623, 21);
+            this.comboBoxTasmotaDevices.TabIndex = 7;
+            this.comboBoxTasmotaDevices.SelectedIndexChanged += new System.EventHandler(this.comboBoxTasmotaDevices_SelectedIndexChanged);
+            // 
+            // buttonSearchTasmotas
+            // 
+            this.buttonSearchTasmotas.Dock = System.Windows.Forms.DockStyle.Right;
+            this.buttonSearchTasmotas.Location = new System.Drawing.Point(626, 16);
+            this.buttonSearchTasmotas.Name = "buttonSearchTasmotas";
+            this.buttonSearchTasmotas.Size = new System.Drawing.Size(75, 95);
+            this.buttonSearchTasmotas.TabIndex = 0;
+            this.buttonSearchTasmotas.Text = "Search";
+            this.buttonSearchTasmotas.UseVisualStyleBackColor = true;
+            this.buttonSearchTasmotas.Click += new System.EventHandler(this.buttonSearchTasmotas_Click);
+            // 
             // statusStripMain
             // 
             this.statusStripMain.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
@@ -197,17 +242,6 @@ namespace GrzTasmotaBot {
             this.toolStripStatusLabelMain.Size = new System.Drawing.Size(42, 17);
             this.toolStripStatusLabelMain.Text = "Status:";
             // 
-            // buttonSearchTasmotas
-            // 
-            this.buttonSearchTasmotas.Dock = System.Windows.Forms.DockStyle.Right;
-            this.buttonSearchTasmotas.Location = new System.Drawing.Point(626, 16);
-            this.buttonSearchTasmotas.Name = "buttonSearchTasmotas";
-            this.buttonSearchTasmotas.Size = new System.Drawing.Size(75, 95);
-            this.buttonSearchTasmotas.TabIndex = 0;
-            this.buttonSearchTasmotas.Text = "Search";
-            this.buttonSearchTasmotas.UseVisualStyleBackColor = true;
-            this.buttonSearchTasmotas.Click += new System.EventHandler(this.buttonSearchTasmotas_Click);
-            // 
             // tabControlDevices
             // 
             this.tabControlDevices.Controls.Add(this.tabPageOverview);
@@ -228,38 +262,10 @@ namespace GrzTasmotaBot {
             this.timerFakeProgress.Interval = 250;
             this.timerFakeProgress.Tick += new System.EventHandler(this.timerFakeProgress_Tick);
             // 
-            // tableLayoutPanelMain
+            // timerTelegramRestart
             // 
-            this.tableLayoutPanelMain.ColumnCount = 2;
-            this.tableLayoutPanelMain.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 50F));
-            this.tableLayoutPanelMain.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 50F));
-            this.tableLayoutPanelMain.Controls.Add(this.buttonSettings, 0, 0);
-            this.tableLayoutPanelMain.Controls.Add(this.groupBoxTasmotaSockets, 0, 2);
-            this.tableLayoutPanelMain.Controls.Add(this.groupBoxLogger, 0, 3);
-            this.tableLayoutPanelMain.Controls.Add(this.groupBoxAllTasmotas, 0, 1);
-            this.tableLayoutPanelMain.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.tableLayoutPanelMain.Location = new System.Drawing.Point(3, 3);
-            this.tableLayoutPanelMain.Name = "tableLayoutPanelMain";
-            this.tableLayoutPanelMain.RowCount = 4;
-            this.tableLayoutPanelMain.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 45F));
-            this.tableLayoutPanelMain.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 120F));
-            this.tableLayoutPanelMain.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 95F));
-            this.tableLayoutPanelMain.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.tableLayoutPanelMain.Size = new System.Drawing.Size(710, 460);
-            this.tableLayoutPanelMain.TabIndex = 11;
-            // 
-            // groupBoxAllTasmotas
-            // 
-            this.tableLayoutPanelMain.SetColumnSpan(this.groupBoxAllTasmotas, 2);
-            this.groupBoxAllTasmotas.Controls.Add(this.comboBoxTasmotaDevices);
-            this.groupBoxAllTasmotas.Controls.Add(this.buttonSearchTasmotas);
-            this.groupBoxAllTasmotas.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.groupBoxAllTasmotas.Location = new System.Drawing.Point(3, 48);
-            this.groupBoxAllTasmotas.Name = "groupBoxAllTasmotas";
-            this.groupBoxAllTasmotas.Size = new System.Drawing.Size(704, 114);
-            this.groupBoxAllTasmotas.TabIndex = 3;
-            this.groupBoxAllTasmotas.TabStop = false;
-            this.groupBoxAllTasmotas.Text = "All Tasmota Devices";
+            this.timerTelegramRestart.Interval = 5000;
+            this.timerTelegramRestart.Tick += new System.EventHandler(this.timerTelegramRestart_Tick);
             // 
             // MainForm
             // 
@@ -276,15 +282,15 @@ namespace GrzTasmotaBot {
             this.Shown += new System.EventHandler(this.MainForm_Shown);
             this.tabPageOverview.ResumeLayout(false);
             this.tabPageOverview.PerformLayout();
+            this.tableLayoutPanelMain.ResumeLayout(false);
             this.groupBoxLogger.ResumeLayout(false);
             this.groupBoxLogger.PerformLayout();
             this.groupBoxTasmotaSockets.ResumeLayout(false);
             this.groupBoxTasmotaSockets.PerformLayout();
+            this.groupBoxAllTasmotas.ResumeLayout(false);
             this.statusStripMain.ResumeLayout(false);
             this.statusStripMain.PerformLayout();
             this.tabControlDevices.ResumeLayout(false);
-            this.tableLayoutPanelMain.ResumeLayout(false);
-            this.groupBoxAllTasmotas.ResumeLayout(false);
             this.ResumeLayout(false);
 
         }
@@ -311,6 +317,7 @@ namespace GrzTasmotaBot {
         private System.Windows.Forms.TextBox textBoxLogger;
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanelMain;
         private System.Windows.Forms.GroupBox groupBoxAllTasmotas;
+        private System.Windows.Forms.Timer timerTelegramRestart;
     }
 }
 
