@@ -43,7 +43,7 @@ namespace GrzTools {
             var ndx = 0;
             foreach ( var cmd in cmdList ) {
                 ndx++;
-                retVal += "/" + cmd + (ndx % cmdCount == 0 ? "\n\n" : "  ");
+                retVal += "/" + cmd + (ndx % cmdCount == 0 ? "\n\n" : "\n");
             }
             return retVal;
         }
