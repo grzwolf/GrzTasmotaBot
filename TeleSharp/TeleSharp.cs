@@ -77,11 +77,14 @@ namespace TeleSharp
             _task.Start();
         }
 
-        public void Stop()
-        {
+        public void Stop() {
             _runHandleMessagesLoop = false;
             _botClient.ClearHandlers();
-            _task.Dispose();
+            try {
+                _task.Dispose();
+            } catch ( Exception ) {
+                // no need to dispose the task, don't even care if it throws
+            }
         }
 
         /// <summary>

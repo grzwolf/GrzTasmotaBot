@@ -46,9 +46,6 @@ namespace GrzTasmotaBot {
             // add "about entry" etc. to app's system menu
             SetupSystemMenu();
 
-            // disable device specific controls
-            this.groupBoxTasmotaSockets.Enabled = false;
-
             // get settings from INI
             AppSettings.IniFile ini = new AppSettings.IniFile(System.Windows.Forms.Application.ExecutablePath + ".ini");
 
@@ -88,68 +85,54 @@ namespace GrzTasmotaBot {
 
             // get previous session host list from INI
             TasmotaHostsList = Settings.getHostsListFromPropertyGrid();
+        }
 
-            // add webbrowser tabs showing pingable Tasmota gadgets regardless what device type
-            for ( int i = 0; i < TasmotaHostsList.Count; i++ ) {
-                PingReply reply = execPing(TasmotaHostsList[i].hostip, 1000);
-                if ( reply != null && reply.Status == System.Net.NetworkInformation.IPStatus.Success ) {
-                    // update TasmotaHostsList regarding host.teleName
-                    TasmotaHostsList[i].teleName = Tools.RemoveSpaces(TasmotaHostsList[i].name);
-                    TasmotaHostsList[i].teleName = Tools.RemoveHashes(TasmotaHostsList[i].teleName);
-                    // add browser tab if not existing
-                    String tasmotaName = TasmotaHostsList[i].name.Trim();
-                    int ndx = TabExistsNdx(tasmotaName);
-                    if ( ndx == -1 ) {
-                        this.tabControlDevices.TabPages.Add(tasmotaName);
-                        int tabNo = this.tabControlDevices.TabPages.Count - 1;
-                        ChromiumWebBrowser cwb = new ChromiumWebBrowser("http://" + TasmotaHostsList[i].hostip + "/");
-                        cwb.Dock = DockStyle.Fill;
-                        this.tabControlDevices.TabPages[tabNo].Controls.Add(cwb);
-                    }
-                } else {
-                    AutoMessageBox.Show("Tasmota device '" + TasmotaHostsList[i].name + "' not available.", "Error", 5000);
-                }
-            }
-
-            // update combobox with so far known Tasmota devices from INI
-            this.comboBoxTasmotaDevices.Items.Clear();
-            foreach ( var host in TasmotaHostsList ) {
-                // update combobox
-                this.comboBoxTasmotaDevices.Items.Add(host.name + " - " + host.hostip + " - " + host.type);
-                // build a Tasmota device specific commands list for each host to be later used in Telgram's receiver parser
-                if ( host.type == TasmotaDeviceFilter ) {
-                    TelegramDeviceCommandList.AddRange(Tools.GetBasicSocketCommands(host.teleName, TasmotaSocket.TASMOTA_SOCKET_COMMANDS));
-                }
-            }
-
-            // build the final "/help command" response string, showing Telegram commands to the remote user
-            TelegramFinalCommands = TELEGRAM_STANDARD_COMMANDS;
-            if ( TasmotaHostsList.Count > 0 ) {
-                TelegramDevicesCommands = Tools.FormatTelegramDecicesCommands(TelegramDeviceCommandList, TasmotaSocket.TASMOTA_SOCKET_COMMANDS.Length);
-                TelegramFinalCommands = TELEGRAM_STANDARD_COMMANDS + TelegramDevicesCommands;
-            }
-
+        // app 1st time shown
+        async private void MainForm_Shown(object sender, EventArgs e) {
+            // form size, location, etc
+            updateAppPropertiesFromSettings();
+            // show Tasmota hosts
+            await UpdateHostsOnUI();
             // comboBoxTasmotaDevices_SelectedIndexChanged(..) takes care about, whether the device belongs to the supported TasmotaSocketsList
             if ( TasmotaHostsList.Count > 0 ) {
                 this.comboBoxTasmotaDevices.SelectedIndex = 0;
             }
+            // first app status
+            this.timerAppStatus_Tick(null, null);
         }
 
-        // app 1st time shown
-        private void MainForm_Shown(object sender, EventArgs e) {
-            // form size, location, etc
-            updateAppPropertiesFromSettings();
+        // auto search Tasmota devices from UI
+        private void checkBoxAutoSearch_Click(object sender, EventArgs e) {
+            // manual click overrides Settings.HostsUpdateInterval just temporarily 
+            if ( this.checkBoxAutoSearch.Checked ) {
+                if ( Settings.HostsUpdateInterval > 0 ) {
+                    this.checkBoxAutoSearch.Text = "auto " + Settings.HostsUpdateInterval.ToString() + "s";
+                    this.timerUpdateHosts.Interval = Settings.HostsUpdateInterval * 1000;
+                    this.timerUpdateHosts.Start();
+                }
+            } else {
+                this.timerUpdateHosts.Stop();
+            }
         }
 
         // obvious
         private void MainForm_FormClosing(object sender, FormClosingEventArgs e) {
+            // no matter what, even if it was not started
+            this.timerUpdateHosts.Stop();
             // current app props
             updateSettingsFromAppProperties();
-            // INI: write settings to ini
-            Settings.writePropertyGridToIni();
+            // shall INI get updated with the current session's TasmotaHostsList                
+            bool updateHostsList = IsUpdateSettingsHostsListDue();
+            // update property grid with 
+            if ( updateHostsList ) {
+                Settings.setPropertyGridToHostsList(TasmotaHostsList);
+            }
+            // write settings to INI
+            Settings.writePropertyGridToIni(updateHostsList);
             // if app live cycle comes here, there was no app crash, write such info to INI for next startup log
             AppSettings.IniFile ini = new AppSettings.IniFile(System.Windows.Forms.Application.ExecutablePath + ".ini");
             ini.IniWriteValue("GrzTasmotaBot", "AppCrash", "False");
+            Logger.logTextLnU(DateTime.Now, "app closed by user");
         }
 
         // show "about" in system menu
@@ -218,17 +201,49 @@ namespace GrzTasmotaBot {
         }
 
         // Tasmota device was selected
-        private void comboBoxTasmotaDevices_SelectedIndexChanged(object sender, EventArgs e) {
+        async private void comboBoxTasmotaDevices_SelectedIndexChanged(object sender, EventArgs e) {
             // disable device specific controls
             this.groupBoxTasmotaSockets.Enabled = false;
             // reset Tasmota device status
             this.labelSocket.Text = "unknown";
-            // enable device specific controls
+            // device complies to device filter setting
             if ( TasmotaHostsList[this.comboBoxTasmotaDevices.SelectedIndex].type == TasmotaDeviceFilter ) {
-                // enable device specific controls
-                this.groupBoxTasmotaSockets.Enabled = true;
-                // get device status
-                this.labelSocket.Text = TasmotaSocket.GetStatus(TasmotaHostsList[this.comboBoxTasmotaDevices.SelectedIndex].hostip);
+                // device is supposed to be pingable
+                if ( TasmotaHostsList[this.comboBoxTasmotaDevices.SelectedIndex].pingable ) {
+                    this.toolStripStatusLabelMain.Text = "";
+                    // make pingable device really sure, it might got disconnected after last refresh
+                    List<host> list = new List<host> { new host(TasmotaHostsList[this.comboBoxTasmotaDevices.SelectedIndex].hostip, "") };
+                    list = await RefreshIpAddressesStatus(list);
+                    // now it should be clear, if device is pingable
+                    if ( list[0].pingable ) {
+                        // enable device specific controls
+                        this.groupBoxTasmotaSockets.Enabled = true;
+                        // get device status
+                        this.labelSocket.Text = TasmotaSocket.GetStatus(TasmotaHostsList[this.comboBoxTasmotaDevices.SelectedIndex].hostip);
+                    }
+                } else {
+                    this.toolStripStatusLabelMain.Text = "Tasmota device '" + TasmotaHostsList[this.comboBoxTasmotaDevices.SelectedIndex].name + "' not available.";
+                }
+            }
+        }
+
+        // periodically check Tasmota hosts
+        private async void timerUpdateHosts_Tick(object sender, EventArgs e) {
+            // timer Tag carries the number of refreshs
+            this.timerUpdateHosts.Tag = Convert.ToInt32(Convert.ToInt32(timerUpdateHosts.Tag) + 1);
+            if ( Convert.ToInt32(this.timerUpdateHosts.Tag.ToString()) >= 10 ) {
+                // execute full search every 10th refresh
+                this.buttonSearchTasmotas.PerformClick();
+                this.timerUpdateHosts.Tag = Convert.ToInt32(0);
+            } else {
+                // just pingable status refresh
+                this.toolStripStatusLabelMain.Text = "refreshing";
+                await UpdateHostsOnUI();
+                if ( this.comboBoxTasmotaDevices.SelectedIndex == -1 ) {
+                    this.comboBoxTasmotaDevices.SelectedIndex = 0;
+                } else {
+                    this.comboBoxTasmotaDevices_SelectedIndexChanged(null, null);
+                }
             }
         }
 
@@ -245,14 +260,19 @@ namespace GrzTasmotaBot {
             String buttonText = this.buttonSearchTasmotas.Text;
             this.buttonSearchTasmotas.Text = "- wait -";
             this.buttonSearchTasmotas.Enabled = false;
-
-            // disable device specific controls
-            this.groupBoxTasmotaSockets.Enabled = false;
             this.labelSocket.Text = "unknown";
+            this.timerUpdateHosts.Stop();
 
             // obtain PC's own IP as a base for the search in the local network
             string ipThis = this.IpThisPC();
             if ( ipThis.Length < 7 ) {
+                this.buttonSearchTasmotas.Text = buttonText;
+                if ( Settings.HostsUpdateInterval > 0 && this.checkBoxAutoSearch.Checked ) {
+                    this.timerUpdateHosts.Interval = Settings.HostsUpdateInterval * 1000;
+                    this.timerUpdateHosts.Start();
+                }
+                MessageBox.Show("IP address " + ipThis + " is wrong, cannot continue.", "Error");
+                this.labelSocket.Text = "Error: IP address " + ipThis + " is wrong, cannot continue.";
                 return;
             }
 
@@ -269,14 +289,40 @@ namespace GrzTasmotaBot {
             // update status bar info
             this.toolStripStatusLabelMain.Text = "Status: found " + hostList.Count.ToString() + " Tasmota devices";
 
-            // add tabs according to found Tasmota devices AND update TasmotaHostsList --> remove NON Tasmota decices from list
-            TasmotaHostsList.Clear();
-            TasmotaHostsList = UpdateTasmotaDeviceListAndBrowsertabs(hostList);
+            // add tabs according to found Tasmota devices
+            List<host> hostListMod = UpdateTasmotaDeviceListAndBrowsertabs(hostList);
 
-            // clear combo
-            this.comboBoxTasmotaDevices.Items.Clear();
+            // merge hostListClean into TasmotaHostsList ?
+            if ( AreHostListsDifferent(TasmotaHostsList, hostListMod) ) {
+                foreach (var host in hostListMod ) {
+                    bool found = false;
+                    for ( int i = 0; i < TasmotaHostsList.Count; i++ ) {
+                        if ( host.name == TasmotaHostsList[i].name && host.hostip == TasmotaHostsList[i].hostip ) {
+                            found = true;
+                            // a found item is definitely pingable
+                            TasmotaHostsList[i].pingable = true;
+                            break;
+                        }
+                    }
+                    // means, hostListMod has more items then TasmotaHostsList: add it + set pingable
+                    if ( !found ) {
+                        TasmotaHostsList.Add(host);
+                        TasmotaHostsList[TasmotaHostsList.Count - 1].pingable = true;
+                    }
+                }
+            } else {
+                // if both list do not deviate from each other, then all hosts are pingable
+                for ( int i = 0; i < TasmotaHostsList.Count; i++ ) {
+                    TasmotaHostsList[i].pingable = true;
+                }
+            }
+
             // clear Telegram device specific commands 
             TelegramDeviceCommandList.Clear();
+
+            // clear combo
+            int lastNdx = this.comboBoxTasmotaDevices.SelectedIndex;
+            this.comboBoxTasmotaDevices.Items.Clear();
             // update combobox with Tasmota devices
             foreach ( var host in TasmotaHostsList ) {
                 // update combobox
@@ -286,6 +332,8 @@ namespace GrzTasmotaBot {
                     TelegramDeviceCommandList.AddRange(Tools.GetBasicSocketCommands(host.teleName, TasmotaSocket.TASMOTA_SOCKET_COMMANDS));
                 }
             }
+            // comboBoxTasmotaDevices_SelectedIndexChanged(..) takes care about, whether the device belongs to the supported TasmotaSocketsList
+            this.comboBoxTasmotaDevices.SelectedIndex = lastNdx;
 
             // build the final "/help command" response string, showing Telegram commands to the remote user
             TelegramFinalCommands = TELEGRAM_STANDARD_COMMANDS;
@@ -294,23 +342,38 @@ namespace GrzTasmotaBot {
                 TelegramFinalCommands = TELEGRAM_STANDARD_COMMANDS + TelegramDevicesCommands;
             }
 
-            // comboBoxTasmotaDevices_SelectedIndexChanged(..) takes care about, whether the device belongs to the supported TasmotaSocketsList
-            if ( TasmotaHostsList.Count > 0 ) {
-                this.comboBoxTasmotaDevices.SelectedIndex = 0;
-            }
-
-            // update property grid
-            Settings.setPropertyGridToHostsList(hostList);
-
-            // INI: write settings to ini
-            Settings.writePropertyGridToIni();
-
             // done
             this.buttonSearchTasmotas.Text = buttonText;
             this.buttonSearchTasmotas.Enabled = true;
             this.timerFakeProgress.Stop();
             this.toolStripProgressBarMain.Value = 100;
+            if ( Settings.HostsUpdateInterval > 0 && this.checkBoxAutoSearch.Checked ) {
+                this.timerUpdateHosts.Interval = Settings.HostsUpdateInterval * 1000;
+                this.timerUpdateHosts.Start();
+            }
         }
+
+        // app status timer
+        private void timerAppStatus_Tick(object sender, EventArgs e) {
+            // once per hour or at app start
+            if ( sender == null || DateTime.Now.Minute % 60 == 0 && DateTime.Now.Second < 31 ) {
+                var pingableCount = TasmotaHostsList.Where(item => item != null && item.pingable).Count();
+                Logger.logTextLnU(DateTime.Now, String.Format("App status: Tasmota hosts count={0}\tpingable={1}\tbot alive={2}", TasmotaHostsList.Count, pingableCount, (_Bot != null)));
+            }
+        }
+
+        // fake progress while scanning network
+        private void timerFakeProgress_Tick(object sender, EventArgs e) {
+            this.Invoke(new Action(() => {
+                if ( this.toolStripProgressBarMain.Value < this.toolStripProgressBarMain.Maximum ) {
+                    this.toolStripProgressBarMain.Value++;
+                } else {
+                    this.toolStripProgressBarMain.Value = 0;
+                }
+            }));
+        }
+
+        // ---------------------------------------------------------------------------------------------------------------------------------------------
 
         // a host in a network
         public class host {
@@ -318,10 +381,12 @@ namespace GrzTasmotaBot {
             public string GETstr;   // host's http GET response string
             public string name;     // Tasmota name as to be found in http GET string between: ... <title>whatever_name - Main Menu</title> ...
             public string type;     // Tasmota device type name --> TasmotaDeviceType
-            public string teleName; // Telegram name deviates from Tasmota name, not allowed: a)  " "  b) "#" 
+            public string teleName; // Telegram Tasmota name deviates from device Tasmota name, not allowed: a)  " "  b) "#" 
+            public bool   pingable; // a device might temprarily not pingable
             public host(string ip, string GETstr) {
                 this.hostip = ip;
                 this.GETstr = GETstr;
+                this.pingable = false;
             }
         }
 
@@ -361,6 +426,167 @@ namespace GrzTasmotaBot {
             }
         }
 
+        // update the visibility of Tasmota hosts in UI
+        async Task UpdateHostsOnUI() {
+            // refresh status of pingable hosts
+            TasmotaHostsList = await RefreshIpAddressesStatus(TasmotaHostsList);
+            
+            this.Invoke(new Action(() => {
+                // reset search progress
+                this.toolStripProgressBarMain.Value = 0;
+                // add webbrowser tabs showing pingable Tasmota gadgets regardless what device type
+                for ( int i = 0; i < TasmotaHostsList.Count; i++ ) {
+                    if ( TasmotaHostsList[i].pingable ) {
+                        // update TasmotaHostsList regarding host.teleName
+                        TasmotaHostsList[i].teleName = Tools.RemoveSpaces(TasmotaHostsList[i].name);
+                        TasmotaHostsList[i].teleName = Tools.RemoveHashes(TasmotaHostsList[i].teleName);
+                        // add browser tab if not existing
+                        String tasmotaName = TasmotaHostsList[i].name.Trim();
+                        int ndx = TabExistsNdx(tasmotaName);
+                        if ( ndx == -1 ) {
+                            this.tabControlDevices.TabPages.Add(tasmotaName);
+                            int tabNo = this.tabControlDevices.TabPages.Count - 1;
+                            ChromiumWebBrowser cwb = new ChromiumWebBrowser("http://" + TasmotaHostsList[i].hostip + "/");
+                            cwb.Dock = DockStyle.Fill;
+                            this.tabControlDevices.TabPages[tabNo].Controls.Add(cwb);
+                        }
+                    } else {
+                        TasmotaHostsList[i].pingable = false;
+                        this.toolStripStatusLabelMain.Text = "Tasmota device '" + TasmotaHostsList[i].name + "' not available.";
+                    }
+                }
+
+                // clear Telegram device specific commands 
+                TelegramDeviceCommandList.Clear();
+
+                // update combobox with Tasmota devices
+                int lastNdx = this.comboBoxTasmotaDevices.SelectedIndex;
+                this.comboBoxTasmotaDevices.Items.Clear();
+                foreach ( var host in TasmotaHostsList ) {
+                    // update combobox
+                    this.comboBoxTasmotaDevices.Items.Add(host.name + " - " + host.hostip + " - " + host.type);
+                    // build a Tasmota device specific commands list for each host to be later used in Telgram's receiver parser
+                    if ( host.type == TasmotaDeviceFilter ) {
+                        // only pingable devices
+                        if ( host.pingable ) {
+                            TelegramDeviceCommandList.AddRange(Tools.GetBasicSocketCommands(host.teleName, TasmotaSocket.TASMOTA_SOCKET_COMMANDS));
+                        }
+                    }
+                }
+                this.comboBoxTasmotaDevices.SelectedIndex = lastNdx;
+            }));
+
+            // build the final "/help command" response string, showing Telegram commands to the remote user
+            TelegramFinalCommands = TELEGRAM_STANDARD_COMMANDS;
+            if ( TasmotaHostsList.Count > 0 ) {
+                TelegramDevicesCommands = Tools.FormatTelegramDecicesCommands(TelegramDeviceCommandList, TasmotaSocket.TASMOTA_SOCKET_COMMANDS.Length);
+                TelegramFinalCommands = TELEGRAM_STANDARD_COMMANDS + TelegramDevicesCommands;
+            }
+        }
+
+        // compare 2x List<host> return if different
+        bool AreHostListsDifferent(List<host>listOne, List<host> listTwo) {
+            bool different = false;
+            if ( listOne.Count != listTwo.Count ) {
+                different = true;
+            } else {
+                // find listOne matches in listTwo
+                bool[] matchesOne = new bool[listOne.Count];
+                for ( int i = 0; i < listOne.Count; i++ ) {
+                    foreach ( var hostTwo in listTwo ) {
+                        if ( hostTwo.name == listOne[i].name && hostTwo.hostip == listOne[i].hostip ) {
+                            matchesOne[i] = true;
+                            break;
+                        }
+                    }
+                }
+                // find listTwo matches in listOne
+                bool[] matchesTwo = new bool[listTwo.Count];
+                for ( int i = 0; i < listTwo.Count; i++ ) {
+                    foreach ( var hostOne in listOne ) {
+                        if ( hostOne.name == listTwo[i].name && hostOne.hostip == listTwo[i].hostip ) {
+                            matchesTwo[i] = true;
+                            break;
+                        }
+                    }
+                }
+                // inspect both matches arrays
+                bool resOne = true;
+                foreach ( var match in matchesOne ) {
+                    if ( !match ) {
+                        resOne = false;
+                    }
+                }
+                bool resTwo = true;
+                foreach ( var match in matchesTwo ) {
+                    if ( !match ) {
+                        resTwo = false;
+                    }
+                }
+                if ( !resOne || !resTwo ) {
+                    different = true;
+                }
+            }
+            // return
+            return different;
+        }
+
+        // compare TasmotaHostsList (app session) with Setting.ListHosts (INI) and return a decision
+        bool IsUpdateSettingsHostsListDue() {
+            bool updateHostsList = false;
+            if ( TasmotaHostsList.Count != Settings.ListHosts.Count ) {
+                updateHostsList = true;
+            } else {
+                // find app matches in INI
+                bool[] matches1 = new bool[TasmotaHostsList.Count];
+                for ( int i = 0; i < TasmotaHostsList.Count; i++ ) {
+                    string hostStr = TasmotaHostsList[i].hostip + "," + TasmotaHostsList[i].name;
+                    foreach ( var hostIni in Settings.ListHosts ) {
+                        if ( hostIni.Contains(hostStr) ) {
+                            matches1[i] = true;
+                            break;
+                        }
+                    }
+                }
+                // find INI matches in app
+                bool[] matches2 = new bool[Settings.ListHosts.Count];
+                for ( int i = 0; i < Settings.ListHosts.Count; i++ ) {
+                    foreach ( var host in TasmotaHostsList ) {
+                        string appStr = host.hostip + "," + host.name;
+                        if ( Settings.ListHosts[i].Contains(appStr) ) {
+                            matches2[i] = true;
+                            break;
+                        }
+                    }
+                }
+                // inspect both matches' arrays
+                bool res1 = true;
+                foreach ( var match in matches1 ) {
+                    if ( !match ) {
+                        res1 = false;
+                    }
+                }
+                bool res2 = true;
+                foreach ( var match in matches2 ) {
+                    if ( !match ) {
+                        res2 = false;
+                    }
+                }
+                if ( !res1 || !res2 ) {
+                    updateHostsList = true;
+                }
+            }
+            // make sure
+            if ( updateHostsList ) {
+                var result = MessageBox.Show("Do you want to save the current session's Tasmota devices list?", "Note", MessageBoxButtons.YesNo);
+                if ( result != DialogResult.Yes ) {
+                    updateHostsList = false;
+                }
+            }
+            // return
+            return updateHostsList;
+        }
+
         // obtain PC's IP address running GrzTasmotaBot
         string IpThisPC() {
             string output = "";
@@ -385,7 +611,26 @@ namespace GrzTasmotaBot {
             return output;
         }
 
-        // get pingable IP adresses in the network, based on the IP from the PC running this app
+        // get pingable status of a given IP adress
+        async Task<bool> PingIpAddress(string ipAddress) {
+            bool pingable = false;
+            // ping task
+            var pingTask = Task.Run(async () => {
+                using ( Ping ping = new Ping() ) {
+                    return await ping.SendPingAsync(ipAddress, 2000);
+                }
+            });
+            // wait for completion of ping task
+            var result = await pingTask;
+            // filter result
+            if ( result.Status == System.Net.NetworkInformation.IPStatus.Success ) {
+                pingable = true;
+            }
+            // return a list of pingable hosts
+            return pingable;
+        }
+
+        // get all pingable IP adresses in the network, based on the IP from the PC running this app
         async Task<List<host>> SearchActiveIpAddresses(string ipThis) {
             List<host> hostList = new List<host>();
             // network IP pattern
@@ -397,13 +642,12 @@ namespace GrzTasmotaBot {
                 ipList.Add(ip);
             }
             // list of ping tasks consumes list of IPs
-            var pingTasks = ipList.Select(async ip =>
-            {
+            var pingTasks = ipList.Select(async ip => {
                 using ( Ping ping = new Ping() ) {
                     return await ping.SendPingAsync(ip, 2000);
                 }
             });
-            // wait for completion of ping tasks
+            // wait for completion of ping tasks, possible performance issue with single task: https://learn.microsoft.com/en-us/dotnet/fundamentals/code-analysis/quality-rules/ca1842
             var results = await Task.WhenAll(pingTasks);
             // filter results
             foreach (var pr in results) {
@@ -413,6 +657,36 @@ namespace GrzTasmotaBot {
             }
             // return a list of pingable hosts
             return hostList;
+        }
+
+        // refresh pingable status of list of IP adresses
+        async Task<List<host>> RefreshIpAddressesStatus(List<host> list) {
+            // reset pingable status
+            for ( int i = 0; i < list.Count; i++ ) {
+                list[i].pingable = false;
+            }
+            // list of ping tasks consumes a list of IPs directly derived from argument list
+            var pingTasks = list.Select(async item => {
+                // one task per ip address
+                using ( Ping ping = new Ping() ) {
+                    return await ping.SendPingAsync(item.hostip, 2000);
+                }
+            });
+            // wait for completion of ping tasks
+            var results = await Task.WhenAll(pingTasks);
+            // loop ping results to find ip address matches with argument list
+            foreach( var r in results ) {
+                // loop argument list
+                for ( int i = 0; i < list.Count; i++ ) {
+                    // find match, note: non pingable IPs provide r.Address being 0.0.0.0
+                    if ( r.Address.ToString() == list[i].hostip ) {
+                        list[i].pingable = (r.Status == System.Net.NetworkInformation.IPStatus.Success);
+                        break;
+                    }
+                }
+            }
+            // return host list with pingable status update
+            return list;
         }
 
         // add tabs with browser according to found Tasmota devices
@@ -433,7 +707,7 @@ namespace GrzTasmotaBot {
                         break;
                     }
                 }
-                // update TasmotaHostsList regarding host.teleName
+                // update regarding host.teleName
                 hostList[i].teleName = Tools.RemoveSpaces(hostList[i].name);
                 hostList[i].teleName = Tools.RemoveHashes(hostList[i].teleName);
                 // add a webbrowser tab showing the Tasmota gadget, if it is not already existing
@@ -527,21 +801,13 @@ namespace GrzTasmotaBot {
             return responseString;
         }
 
-        // fake progress while scanning network
-        private void timerFakeProgress_Tick(object sender, EventArgs e) {
-            this.Invoke(new Action(() => {
-                if ( this.toolStripProgressBarMain.Value < this.toolStripProgressBarMain.Maximum ) {
-                    this.toolStripProgressBarMain.Value++;
-                } else {
-                    this.toolStripProgressBarMain.Value = 0;
-                }
-            }));
-        }
+        // ------------------------------------------- Telegram section ---------------------------------------------------------------------------
 
         // try to restart Telegram, if it should run but it doesn't due to an internal fail
         private void timerTelegramRestart_Tick(object sender, EventArgs e) {
             // stop timerTelegramRestart
             this.timerTelegramRestart.Stop();
+            Logger.logTextLn(DateTime.Now, "timerTelegramRestart_Tick: timer stopped");
             // limit app restarts
             if ( Settings.UseTelegramBot && _Bot == null && Settings.TelegramRestartAppCount < 5 ) {
                 // restart app after too many failing Telegram restarts in the current app session
@@ -552,7 +818,7 @@ namespace GrzTasmotaBot {
                     // memorize count of Telegram malfunctions forcing an app restart: needed to avoid restart loops
                     Settings.TelegramRestartAppCount++;
                     ini.IniWriteValue("GrzTasmotaBot", "TelegramRestartAppCount", Settings.TelegramRestartAppCount.ToString());
-                    Logger.logTextLnU(DateTime.Now, String.Format("timerTelegramRestart_Tic: Telegram restart count > 5, now restarting GrzTasmotaBot"));
+                    Logger.logTextLnU(DateTime.Now, String.Format("timerTelegramRestart_Tick: Telegram restart count > 5, now restarting GrzTasmotaBot"));
                     // restart GrzTasmotaBot: if Telegram restart count in session > 5, then restart app (usual max. 2 over months)
                     string exeName = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
                     ProcessStartInfo startInfo = new ProcessStartInfo(exeName);
@@ -563,13 +829,15 @@ namespace GrzTasmotaBot {
                 } else {
                     // restart Telegram
                     _telegramRestartCounter++;
-                    Logger.logTextLnU(DateTime.Now, String.Format("timerFlowControl_Tick: Telegram restart #{0} of 5", _telegramRestartCounter));
+                    Logger.logTextLnU(DateTime.Now, String.Format("timerTelegramRestart_Tick: Telegram restart #{0} of 5", _telegramRestartCounter));
                     _telegramOnErrorCount = 0;
                     _Bot = new TeleSharp.TeleSharp(Settings.BotAuthenticationToken);
                     _Bot.OnMessage += OnMessage;
                     _Bot.OnError += OnError;
                     _Bot.OnLiveTick += OnLiveTick;
                 }
+            } else {
+                Logger.logTextLnU(DateTime.Now, String.Format("timerTelegramRestart_Tick: missed restart use={0} bot={1} count={2}", Settings.UseTelegramBot, _Bot.ToString(), Settings.TelegramRestartAppCount));
             }
         }
         // Telegram connector provides a live tick info, this timer tick shall act, if Telegram live tick info fails multiple times
@@ -598,11 +866,13 @@ namespace GrzTasmotaBot {
                         _telegramLiveTickErrorCount++;
                         Logger.logTextLnU(DateTime.Now, String.Format("timerCheckTelegramLiveTick_Tick: Telegram not active detected, now shut it down #{0}", _telegramLiveTickErrorCount));
                         try {
-                            _Bot.OnMessage -= OnMessage;
-                            _Bot.OnError -= OnError;
-                            _Bot.OnLiveTick -= OnLiveTick;
-                            _Bot.Stop();
-                            _Bot = null;
+                            if ( _Bot != null ) {
+                                _Bot.OnMessage -= OnMessage;
+                                _Bot.OnError -= OnError;
+                                _Bot.OnLiveTick -= OnLiveTick;
+                                _Bot.Stop();
+                                _Bot = null;
+                            }
                         } catch ( Exception ex ) {
                             Logger.logTextLnU(DateTime.Now, String.Format("timerCheckTelegramLiveTick_Tick ex: {0}", ex.Message));
                         }
@@ -678,7 +948,7 @@ namespace GrzTasmotaBot {
                                 break;
                             }
                         case "/hello": {
-                                string welcomeMessage = $"Welcome {message.From.Username} !{Environment.NewLine}My name is {_Bot.Me.Username}{Environment.NewLine}";
+                                string welcomeMessage = $"Welcome {message.From.Username} !{Environment.NewLine}My name is GrzTasmotaBot{Environment.NewLine}";
                                 _Bot.SendMessage(new SendMessageParams {
                                     ChatId = sender.Id.ToString(),
                                     Text = welcomeMessage
@@ -794,29 +1064,27 @@ namespace GrzTasmotaBot {
             }
         }
 
-        // ping internet
-        System.Net.NetworkInformation.PingReply execPing(string strTestIP, int msTimeout) {
-            System.Net.NetworkInformation.Ping pinger = new System.Net.NetworkInformation.Ping();
-            System.Net.NetworkInformation.PingReply reply = pinger.Send(strTestIP, msTimeout);
-            return reply;
-        }
+        // periodically ping internet: no need to do it async -> even blocking is ok, because doPingLooper runs in its own from UI separated thread
         public void doPingLooper(ref bool runPing, ref string strTestIP) {
             int pingFailCounter = 0;
             int stopLogCounter = 0;
             do {
-                // execute ping
-                System.Net.NetworkInformation.PingReply reply = execPing(strTestIP, 100);
+                // execute ping: async were a nice to have, but arguments with ref are not allowed
+                PingReply reply = null;
+                using ( Ping ping = new Ping() ) {
+                    reply = ping.Send(strTestIP, 1000);
+                }
                 // two possibilities
                 if ( reply != null && reply.Status == System.Net.NetworkInformation.IPStatus.Success ) {
                     // ping ok
                     Settings.PingOk = true;
                     // notify about previous fails
                     if ( pingFailCounter > 10 ) {
-                        Logger.logTextLnU(DateTime.Now, String.Format("ping is ok - after {0} fails", pingFailCounter));
+                        Logger.logTextLnU(DateTime.Now, String.Format("doPingLooper: ping is ok - after {0} fails", pingFailCounter));
                     }
                     pingFailCounter = 0;
                     if ( stopLogCounter > 0 ) {
-                        Logger.logTextLnU(DateTime.Now, "ping is ok - after a long time failing");
+                        Logger.logTextLnU(DateTime.Now, "doPingLooper: ping is ok - after a long time failing");
                     }
                     stopLogCounter = 0;
                 } else {
@@ -824,18 +1092,19 @@ namespace GrzTasmotaBot {
                     Settings.PingOk = false;
                     pingFailCounter++;
                 }
-                // reboot AFTER 10x subsequent ping fails in 100s 
+                // 10x subsequent ping fails in 100s 
                 if ( (pingFailCounter > 0) && (pingFailCounter % 10 == 0) ) {
-                    Logger.logTextLn(DateTime.Now, "network reset after 10x ping fail");
+                    Logger.logTextLn(DateTime.Now, "doPingLooper: network reset after 10x ping fail");
                     bool networkUp = System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable();
                     if ( networkUp ) {
-                        Logger.logTextLn(DateTime.Now, "network is up, but 10x ping failed");
+                        Logger.logTextLn(DateTime.Now, "doPingLooper: network is up, but 10x ping failed");
                         if ( stopLogCounter < 5 ) {
-                            Logger.logTextLn(DateTime.Now, "Reboot Counter >= 3 --> no reboot, despite of local network is up");
+                            Logger.logTextLn(DateTime.Now, "doPingLooper: local network is up");
                             stopLogCounter++;
-                        }                    } else {
+                        }
+                    } else {
                         if ( stopLogCounter < 5 ) {
-                            Logger.logTextLn(DateTime.Now, "Reboot Counter >= 3 --> no reboot, despite of network is down");
+                            Logger.logTextLn(DateTime.Now, "doPingLooper: network is down");
                             stopLogCounter++;
                         }
                     }
@@ -845,13 +1114,15 @@ namespace GrzTasmotaBot {
             } while ( runPing );
         }
 
+        // --------------------------------------- Settings helpers ------------------------------------------------------------
+
         // update settings from app
         void updateSettingsFromAppProperties() {
             Settings.FormSize = this.Size;
             Settings.FormLocation = this.Location;
         }
         // update app from settings
-        void updateAppPropertiesFromSettings() {
+        async void updateAppPropertiesFromSettings() {
             // UI app layout
             this.Size = Settings.FormSize;
             // get all display ranges (multiple monitors) and check, if desired location fits in
@@ -883,12 +1154,7 @@ namespace GrzTasmotaBot {
             // assume an app crash as default behavior: this flag is reset to False, if app closes the normal way
             ini.IniWriteValue("GrzTasmotaBot", "AppCrash", "True");
             // handle Telegram bot usage
-            System.Net.NetworkInformation.PingReply reply = execPing(Settings.PingTestAddress, 1000);
-            if ( reply != null && reply.Status == System.Net.NetworkInformation.IPStatus.Success ) {
-                Settings.PingOk = true;
-            } else {
-                Settings.PingOk = false;
-            }
+            Settings.PingOk = await PingIpAddress(Settings.PingTestAddress);
             if ( Settings.PingOk ) {
                 // could be, that Telegram was recently enabled in Settings, but don't activate it, if restart count is already too large
                 if ( Settings.UseTelegramBot && Settings.TelegramRestartAppCount < 5 ) {
@@ -926,7 +1192,18 @@ namespace GrzTasmotaBot {
             Settings.PingTestAddressRef = Settings.PingTestAddress;
             if ( !_runPing ) {
                 _runPing = true;
+                 #pragma warning disable 4014
                 Task.Run(() => { doPingLooper(ref _runPing, ref Settings.PingTestAddressRef); });
+                #pragma warning restore 4014
+            }
+            // search Tasmota hosts refresh timer
+            this.checkBoxAutoSearch.Text = "auto";
+            this.checkBoxAutoSearch.Checked = false;
+            if ( Settings.HostsUpdateInterval > 0 ) {
+                this.checkBoxAutoSearch.Checked = true;
+                this.checkBoxAutoSearch.Text = "auto " + Settings.HostsUpdateInterval.ToString() + "s";
+                this.timerUpdateHosts.Interval = Settings.HostsUpdateInterval * 1000;
+                this.timerUpdateHosts.Start();
             }
         }
         // call app settings --> PropertyGrid dialog
@@ -981,8 +1258,19 @@ namespace GrzTasmotaBot {
                         return;
                     }
                 }
+                // shall INI get updated with the current session's TasmotaHostsList                
+                bool updateHostsList = IsUpdateSettingsHostsListDue();
+                // update property grid with 
+                if ( updateHostsList ) {
+                    Settings.setPropertyGridToHostsList(TasmotaHostsList);
+                }
                 // write settings to INI
-                Settings.writePropertyGridToIni();
+                Settings.writePropertyGridToIni(updateHostsList);
+                // hosts refresh timer
+                if ( Settings.HostsUpdateInterval > 0 ) {
+                    this.timerUpdateHosts.Interval = Settings.HostsUpdateInterval * 1000;
+                    this.timerUpdateHosts.Start();
+                }
             } else {
                 Settings.CopyAllTo(oldSettings, out Settings);
             }
@@ -990,7 +1278,7 @@ namespace GrzTasmotaBot {
 
     }
 
-    // app settings
+    // --------------------------------- app settings class --------------------------------------------------------------
     public class AppSettings {
 
         // the literal name of the ini section
@@ -1103,6 +1391,10 @@ namespace GrzTasmotaBot {
         [DisplayName("ListHosts")]
         [Description("List all Tasmota hosts (not editable)")]
         public BindingList<string> ListHosts { get; set; }
+        [CategoryAttribute("Tasmota hosts")]
+        [DisplayName("Auto hosts update interval")]
+        [Description("Value in seconds, 0 disables auto update")]
+        public int HostsUpdateInterval { get; set; }
 
         // INI: read PropertyGrid from ini
         public void fillPropertyGridFromIni() {
@@ -1178,12 +1470,18 @@ namespace GrzTasmotaBot {
                     break;
                 }
             }
+            // hosts update interval
+            if ( int.TryParse(ini.IniReadValue("Tasmota section", "HostsUpdateInterval", "0"), out tmpInt) ) {
+                HostsUpdateInterval = Math.Abs(tmpInt);
+            }
         }
 
         // INI: write to ini
-        public void writePropertyGridToIni() {
-            // wipe existing ini
-            System.IO.File.Delete(System.Windows.Forms.Application.ExecutablePath + ".ini");
+        public void writePropertyGridToIni(bool updateHosts) {
+            // only wipe existing INI, if hosts are updated anyways - otherwise there won't be any hosts
+            if ( updateHosts ) {
+                System.IO.File.Delete(System.Windows.Forms.Application.ExecutablePath + ".ini");
+            }
             // ini from scratch
             IniFile ini = new IniFile(System.Windows.Forms.Application.ExecutablePath + ".ini");
             // form width
@@ -1214,9 +1512,13 @@ namespace GrzTasmotaBot {
             // Telegram bot authentication token
             ini.IniWriteValue(iniSection, "BotAuthenticationToken", BotAuthenticationToken);
             // write Tasmota hosts from PropertyGrid array to INI
-            for ( int i = 0; i < ListHosts.Count; i++ ) {
-                ini.IniWriteValue("Tasmota section", "host" + i.ToString(), ListHosts[i]);
+            if ( updateHosts ) {
+                for ( int i = 0; i < ListHosts.Count; i++ ) {
+                    ini.IniWriteValue("Tasmota section", "host" + i.ToString(), ListHosts[i]);
+                }
             }
+            // hosts update interval 
+            ini.IniWriteValue("Tasmota section", "HostsUpdateInterval", HostsUpdateInterval.ToString());
         }
 
         // obtain a string list of hosts from the settings PropertyGrid 

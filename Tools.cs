@@ -29,7 +29,7 @@ namespace GrzTools {
         // basic Tasmota gadget commands assigned to a living device identified by its Telegram friendly name called teleName
         public static List<String> GetBasicSocketCommands(string teleName, string[] cmds) {
             List<String> retList = new List<String>();
-            if ( teleName.Length > 0 ) {
+            if ( teleName != null && teleName.Length > 0 ) {
                 foreach ( var cmd in cmds ) {
                     retList.Add(teleName + cmd);
                 }
