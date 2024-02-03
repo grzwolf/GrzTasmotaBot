@@ -862,7 +862,7 @@ namespace GrzTasmotaBot {
                             this.Close();
                         } catch ( Exception ) {; }
                     } else {
-                        // try to restart Telegram, it's not fully reliable - therefore a counter is introduced
+                        // try to restart Telegram
                         _telegramLiveTickErrorCount++;
                         Logger.logTextLnU(DateTime.Now, String.Format("timerCheckTelegramLiveTick_Tick: Telegram not active detected, now shut it down #{0}", _telegramLiveTickErrorCount));
                         try {
@@ -873,6 +873,8 @@ namespace GrzTasmotaBot {
                                 _Bot.Stop();
                                 _Bot = null;
                             }
+                            Logger.logTextLnU(DateTime.Now, "timerCheckTelegramLiveTick_Tick: trying to restart in 5 min");
+                            this.timerTelegramRestart.Start();
                         } catch ( Exception ex ) {
                             Logger.logTextLnU(DateTime.Now, String.Format("timerCheckTelegramLiveTick_Tick ex: {0}", ex.Message));
                         }
@@ -1184,6 +1186,7 @@ namespace GrzTasmotaBot {
                     _Bot.OnLiveTick -= OnLiveTick;
                     _Bot.Stop();
                     this.timerCheckTelegramLiveTick.Stop();
+                    this.timerTelegramRestart.Stop();
                     _Bot = null;
                     Logger.logTextLn(DateTime.Now, "updateAppPropertiesFromSettings: Telegram bot deactivated");
                 }
