@@ -1590,7 +1590,7 @@ namespace GrzTasmotaBot {
         public Boolean UseTelegramWhitelist { get; set; }
         [CategoryAttribute("Telegram")]
         [DisplayName("Telegram whitelist")]
-        [Description("List of clients allowed to communicate with the bot")]
+        [Description("List of clients allowed to communicate with the bot.\nUse this format (w/o quotes): 'a readable name,Telegram-ID'\nTelegram-ID could be obtained from UI Messages Logger window.")]
         [ReadOnly(false)]
         public BindingList<string> TelegramWhitelist { get; set; }
         [CategoryAttribute("Telegram")]

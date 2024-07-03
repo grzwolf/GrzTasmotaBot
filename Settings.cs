@@ -5,7 +5,7 @@ using System.Data;
 using System.Drawing;
 using System.Linq;
 using System.Text;
-using System.Windows.Forms; 
+using System.Windows.Forms;
 
 using System.Reflection;              // change column width of a propertygrid
 
@@ -46,6 +46,33 @@ namespace GrzTasmotaBot
         private void Settings_Load( object sender, EventArgs e )
         {
             SetLabelColumnWidth(this.propertyGrid, 180);
+            ResizeDescriptionArea(ref this.propertyGrid, 6);
+        }
+
+        // if description area needs more lines: https://www.codeproject.com/Articles/28193/Change-the-height-of-a-PropertyGrid-s-description
+        bool ResizeDescriptionArea(ref PropertyGrid grid, int nNumLines) {
+            try {
+                System.Reflection.PropertyInfo pi = grid.GetType().GetProperty("Controls");
+                Control.ControlCollection cc = grid.Controls;
+                foreach ( Control c in cc ) {
+                    Type ct = c.GetType();
+                    string sName = ct.Name;
+                    if ( sName == "DocComment" ) {
+                        pi = ct.GetProperty("Lines");
+                        pi.SetValue(c, nNumLines, null);
+                        System.Reflection.FieldInfo fi = ct.BaseType.GetField(
+                            "userSized",
+                            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic
+                            );
+
+                        fi.SetValue(c, true);
+                        break;
+                    }
+                }
+                return true;
+            } catch ( Exception ) {
+                return false;
+            }
         }
 
     }
