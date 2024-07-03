@@ -226,6 +226,7 @@ namespace GrzTasmotaBot {
                 this.ChartPower.ChartAreas[0].AxisX.MinorTickMark.Enabled = false;
                 this.ChartPower.ChartAreas[0].AxisX.Interval = -1;
                 this.ChartPower.ChartAreas[0].AxisX.LabelStyle.Font = new System.Drawing.Font("Trebuchet MS", 6.0F, System.Drawing.FontStyle.Regular);
+                this.ChartPower.ChartAreas[0].AxisY.LabelStyle.Font = new System.Drawing.Font("Trebuchet MS", 6.0F, System.Drawing.FontStyle.Regular);
                 // use historical wattage data if existing
                 gadgetDataList.Clear();
                 string gadgetDataFileName = TasmotaHostsList[this.comboBoxTasmotaDevices.SelectedIndex].name + ".data";
