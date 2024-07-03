@@ -11,8 +11,7 @@ using TeleSharp.Entities.SendEntities;
 using TeleSharp.Properties;
 using File = TeleSharp.Entities.File;
 
-namespace TeleSharp
-{
+namespace TeleSharp {
     public class TeleSharp
     {
         private DateTime _lastResponseDateTime;
@@ -77,7 +76,8 @@ namespace TeleSharp
             _task.Start();
         }
 
-        public void Stop() {
+        public void Stop()
+        {
             _runHandleMessagesLoop = false;
             _botClient.ClearHandlers();
             try {

@@ -15,6 +15,8 @@ using TeleSharp.Entities;                // Telegram
 using TeleSharp.Entities.SendEntities;   // Telegram
 using GrzTools;                          // tools
 using System.Reflection;
+using System.Drawing.Imaging;
+using System.IO;
 
 namespace GrzTasmotaBot {
     public partial class MainForm : Form {
@@ -26,6 +28,9 @@ namespace GrzTasmotaBot {
         List<host> TasmotaHostsList = new List<host>();               // list of hosts in the local subnet
         List<string> TasmotaSocketsList = new List<string>();         // list of device names, which identify Tasmota socket devices  
         string TasmotaDeviceFilter = TasmotaDeviceType.UNKNOWN;
+
+        // data 
+        List<string> gadgetDataList = new List<string>();
 
         // Telegram bot
         TeleSharp.TeleSharp _Bot = null;                              // the bot
@@ -71,7 +76,7 @@ namespace GrzTasmotaBot {
             List<MethodInfo> methods = new List<MethodInfo>();
             MethodInfo[] allMethods = typeof(TasmotaSocket).GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static);
             for ( int i = allMethods.Length - 1; i >= 0; i-- ) {
-                string methodName = allMethods[i].Name.ToLower();
+                string methodName = allMethods[i].Name;
                 // discard non TASMOTA_SOCKET_COMMANDS like ToString etc
                 foreach ( var cmd in TasmotaSocket.TASMOTA_SOCKET_COMMANDS ) {
                     string cmdMod = cmd.Substring(1);
@@ -199,6 +204,83 @@ namespace GrzTasmotaBot {
         private void buttonSocketStatus_Click(object sender, EventArgs e) {
             this.labelSocket.Text = TasmotaSocket.GetStatus(TasmotaHostsList[this.comboBoxTasmotaDevices.SelectedIndex].hostip);
         }
+        private void updatePower() {
+            // get current power value
+            string wattageStr = TasmotaSocket.GetPower(TasmotaHostsList[this.comboBoxTasmotaDevices.SelectedIndex].hostip);
+            this.labelPower.Text = wattageStr + " Watt";
+            if ( this.checkBoxPower.Checked ) {
+                // update chart
+                this.ChartPower.Series["W"].Points.Add(new System.Windows.Forms.DataVisualization.Charting.DataPoint(this.ChartPower.Series["W"].Points.Count, Int32.Parse(wattageStr)));
+                // update data file
+                string gadgetDataFileName = TasmotaHostsList[this.comboBoxTasmotaDevices.SelectedIndex].name + ".data";
+                System.IO.File.AppendAllText(gadgetDataFileName, wattageStr + ",");
+            }
+        }
+        private void checkPower(object sender, EventArgs e) {
+            if ( this.checkBoxPower.Checked ) {
+                // chart starts clean  
+                this.ChartPower.Series["W"].Points.Clear();
+                this.ChartPower.ChartAreas[0].AxisX.Minimum = 0;
+                this.ChartPower.ChartAreas[0].AxisX.MinorGrid.Enabled = false;
+                this.ChartPower.ChartAreas[0].AxisX.MajorTickMark.Enabled = false;
+                this.ChartPower.ChartAreas[0].AxisX.MinorTickMark.Enabled = false;
+                this.ChartPower.ChartAreas[0].AxisX.Interval = -1;
+                this.ChartPower.ChartAreas[0].AxisX.LabelStyle.Font = new System.Drawing.Font("Trebuchet MS", 6.0F, System.Drawing.FontStyle.Regular);
+                // use historical wattage data if existing
+                gadgetDataList.Clear();
+                string gadgetDataFileName = TasmotaHostsList[this.comboBoxTasmotaDevices.SelectedIndex].name + ".data";
+                if ( System.IO.File.Exists(gadgetDataFileName) ) {
+                    gadgetDataList = System.IO.File.ReadAllText(gadgetDataFileName)
+                        .Split(new[] { "," }, StringSplitOptions.RemoveEmptyEntries)
+                        .ToList();
+                }
+                // insert historical data into chart
+                foreach ( string data in gadgetDataList ) {
+                    this.ChartPower.Series["W"].Points.Add(
+                        new System.Windows.Forms.DataVisualization.Charting.DataPoint(
+                            this.ChartPower.Series["W"].Points.Count, Int32.Parse(data)
+                        )
+                    );
+                }
+                // show most current power value
+                updatePower();
+            }
+        }
+        // from UI delete historical data, but last 20
+        private void ClearPower_Click(object sender, EventArgs e) {
+            if ( MessageBox.Show("You sure?", "Delete historical data", MessageBoxButtons.YesNo) == DialogResult.Yes ) {
+                ClearPowerHistory();
+            }
+        }
+        void ClearPowerHistory() {
+            // clear data list 
+            gadgetDataList.Clear();
+            // fill data list from data file
+            string gadgetDataFileName = TasmotaHostsList[this.comboBoxTasmotaDevices.SelectedIndex].name + ".data";
+            if ( System.IO.File.Exists(gadgetDataFileName) ) {
+                gadgetDataList = System.IO.File.ReadAllText(gadgetDataFileName)
+                    .Split(new[] { "," }, StringSplitOptions.RemoveEmptyEntries)
+                    .ToList();
+            }
+            // leave last 20 data in list untouched
+            gadgetDataList.RemoveRange(0, Math.Min(Math.Max(0, gadgetDataList.Count - 20), gadgetDataList.Count));
+            // delete data file
+            System.IO.File.Delete(gadgetDataFileName);
+            // chart start clean
+            this.ChartPower.Series[0].Points.Clear();
+            this.ChartPower.ChartAreas[0].AxisX.Minimum = 0;
+            // insert historical data into chart and refill data file
+            foreach ( string data in gadgetDataList ) {
+                this.ChartPower.Series["W"].Points.Add(
+                    new System.Windows.Forms.DataVisualization.Charting.DataPoint(
+                        this.ChartPower.Series["W"].Points.Count, Int32.Parse(data)
+                    )
+                );
+                System.IO.File.AppendAllText(gadgetDataFileName, data + ",");
+            }
+            // first update
+            updatePower();
+        }
 
         // Tasmota device was selected
         async private void comboBoxTasmotaDevices_SelectedIndexChanged(object sender, EventArgs e) {
@@ -225,6 +307,14 @@ namespace GrzTasmotaBot {
                     this.toolStripStatusLabelMain.Text = "Tasmota device '" + TasmotaHostsList[this.comboBoxTasmotaDevices.SelectedIndex].name + "' not available.";
                 }
             }
+            // update power graph
+            if ( this.checkBoxPower.Checked ) {
+                // simulate click on power checkbox
+                checkPower(null, null);
+            } else {
+                // show current power value
+                updatePower();
+            }
         }
 
         // periodically check Tasmota hosts
@@ -238,11 +328,11 @@ namespace GrzTasmotaBot {
             } else {
                 // just pingable status refresh
                 this.toolStripStatusLabelMain.Text = "refreshing";
+                // refreshes combobox with Tasmota devices
                 await UpdateHostsOnUI();
+                // fallback check, just in case the index is not valid: should not happen at all
                 if ( this.comboBoxTasmotaDevices.SelectedIndex == -1 ) {
                     this.comboBoxTasmotaDevices.SelectedIndex = 0;
-                } else {
-                    this.comboBoxTasmotaDevices_SelectedIndexChanged(null, null);
                 }
             }
         }
@@ -326,7 +416,7 @@ namespace GrzTasmotaBot {
             // update combobox with Tasmota devices
             foreach ( var host in TasmotaHostsList ) {
                 // update combobox
-                this.comboBoxTasmotaDevices.Items.Add(host.name + " - " + host.hostip + " - " + host.type);
+                this.comboBoxTasmotaDevices.Items.Add(host.name + " - " + host.hostip + " - " + host.type + " - " + (host.pingable ? "online" : "<offline>"));
                 // build a Tasmota device specific commands list for each host to be later used in Telgram's receiver parser
                 if ( host.type == TasmotaDeviceFilter ) {
                     TelegramDeviceCommandList.AddRange(Tools.GetBasicSocketCommands(host.teleName, TasmotaSocket.TASMOTA_SOCKET_COMMANDS));
@@ -400,9 +490,9 @@ namespace GrzTasmotaBot {
         // Tasmota TasmotaDeviceType.SOCKET methods to be used in UI
         class TasmotaSocket {
             // literal socket type commands
-            public static string[] TASMOTA_SOCKET_COMMANDS = { "_on", "_off", "_status" };
+            public static string[] TASMOTA_SOCKET_COMMANDS = { "_SetOn", "_SetOff", "_GetStatus", "_GetPower", "_GetPowerHistory", "_ClearPowerHistory", "_TogglePowerMonitor" };
             // class TasmotaSocket methods array
-            public static MethodInfo[] methods = { null }; 
+            public static MethodInfo[] methods = { null };
             // implemented methods to control a socket device
             public static string SetOn(String ipString) {
                 return GetHttpCommandResponse("http://" + ipString + "/cm?cmnd=Power on");
@@ -410,11 +500,15 @@ namespace GrzTasmotaBot {
             public static string SetOff(String ipString) {
                 return GetHttpCommandResponse("http://" + ipString + "/cm?cmnd=Power off");
             }
-            public static string GetStatus(String ipString) {
+            public static string GetStatus(String ipString, bool withWattage = false) {
                 var retVal = "";
                 string response = GetHttpCommandResponse("http://" + ipString + "/cm?cmnd=status");
                 if ( response.IndexOf("\"Power\":1") != -1 ) {
+                    string wattage = GetPower(ipString);
                     retVal = "Power = ON";
+                    if ( withWattage ) {
+                        retVal += ", consumption = " + wattage + "W";
+                    }
                 } else {
                     if ( response.IndexOf("\"Power\":0") != -1 ) {
                         retVal = "Power = off";
@@ -423,6 +517,41 @@ namespace GrzTasmotaBot {
                     }
                 }
                 return retVal;
+            }
+            public static string GetPower(String ipString) {
+                String wattageStr = "-1";
+                // get current power value
+                try {
+                    String[] respArr = GetHttpCommandResponse("http://" + ipString + "/cm?cmnd=Status+8").Split(',');
+                    foreach ( String item in respArr ) {
+                        if ( item.StartsWith("\"Power\":") ) {
+                            wattageStr = item.Substring(8);
+                            break;
+                        }
+                    }
+                } catch ( ArgumentException ) {
+                    wattageStr = "-1";
+                }
+                return wattageStr;
+            }
+            // get image graph 
+            public static byte[] GetPowerHistory(String ipString, MainForm main) {
+                MemoryStream stream = new MemoryStream();
+                main.ChartPower.SaveImage(stream, ImageFormat.Png);
+                return stream.ToArray();
+            }
+            // toggle power monitoring
+            public static string TogglePowerMonitor(String ipString, MainForm main) {
+                main.checkBoxPower.Checked = !main.checkBoxPower.Checked;
+                main.checkPower(null, null);
+                return ": power monitoring = " + main.checkBoxPower.Checked.ToString();
+            }
+            // clear power history accoding to ipString
+            public static void ClearPowerHistory(String ipString, MainForm main) {
+                // activate requested Tasmota device
+                GetPower(ipString);
+                // clear its historical data
+                main.ClearPowerHistory();
             }
         }
 
@@ -464,7 +593,7 @@ namespace GrzTasmotaBot {
                 this.comboBoxTasmotaDevices.Items.Clear();
                 foreach ( var host in TasmotaHostsList ) {
                     // update combobox
-                    this.comboBoxTasmotaDevices.Items.Add(host.name + " - " + host.hostip + " - " + host.type);
+                    this.comboBoxTasmotaDevices.Items.Add(host.name + " - " + host.hostip + " - " + host.type + " - " + (host.pingable ? "online" : "<offline>"));
                     // build a Tasmota device specific commands list for each host to be later used in Telgram's receiver parser
                     if ( host.type == TasmotaDeviceFilter ) {
                         // only pingable devices
@@ -934,133 +1063,205 @@ namespace GrzTasmotaBot {
             } else {
                 AutoMessageBox.Show("Consider using Telegram whitelist features.", "Security Warning", 5000);
             }
-            // received message parser
+
             try {
-                if ( !string.IsNullOrEmpty(message.Text) )
-                    // treat standard messages 
-                    switch ( message.Text.ToLower() ) {
-                        case "/help": {
+                // received message check
+                if ( string.IsNullOrEmpty(message.Text) ) {
+                    return;
+                }
+                // received message parser: at first, handle standard messages 
+                switch ( message.Text.ToLower() ) {
+                    // help: sends all vailable commands to caller
+                    case "/help": {
+                            _Bot.SendMessage(new SendMessageParams {
+                                ChatId = sender.Id.ToString(),
+                                Text = TelegramFinalCommands
+                            });
+                            this.Invoke(new Action(() => {
+                                this.textBoxLogger.AppendText(DateTime.Now.ToString() + " TX '" + TelegramFinalCommands + "' to: " + sender.Id.ToString() + "\r\n");
+                            }));
+                            break;
+                        }
+                    // welcome msg
+                    case "/hello": {
+                            string welcomeMessage = $"Welcome {message.From.Username} !{Environment.NewLine}My name is GrzTasmotaBot{Environment.NewLine}";
+                            _Bot.SendMessage(new SendMessageParams {
+                                ChatId = sender.Id.ToString(),
+                                Text = welcomeMessage
+                            });
+                            this.Invoke(new Action(() => {
+                                this.textBoxLogger.AppendText(DateTime.Now.ToString() + " TX '" + welcomeMessage + "' to: " + sender.Id.ToString() + "\r\n");
+                            }));
+                            break;
+                        }
+                    // time
+                    case "/time": {
+                            _Bot.SendMessage(new SendMessageParams {
+                                ChatId = sender.Id.ToString(),
+                                Text = DateTime.Now.ToShortDateString() + " " + DateTime.Now.ToShortTimeString()
+                            });
+                            this.Invoke(new Action(() => {
+                                this.textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' timestamp ' to: " + sender.Id.ToString() + "\r\n");
+                            }));
+                            break;
+                        }
+                    // location = fake
+                    case "/location": {
+                            _Bot.SendLocation(sender, "50.69421", "3.17456");
+                            this.Invoke(new Action(() => {
+                                this.textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' location ' to: " + sender.Id.ToString() + "\r\n");
+                            }));
+                            break;
+                        }
+                    // handle device specific messages: get the device specific Telegram command and execute it
+                    default: {
+                            string teleCmdMatch = TelegramDeviceCommandList.FirstOrDefault(cmd => "/" + cmd == message.Text);
+                            // check for match
+                            if ( teleCmdMatch == null ) {
+                                // we have a 'no Telegram command' error ==> get out and return
                                 _Bot.SendMessage(new SendMessageParams {
                                     ChatId = sender.Id.ToString(),
-                                    Text = TelegramFinalCommands 
+                                    Text = "command  " + message.Text + " not valid"
                                 });
                                 this.Invoke(new Action(() => {
-                                    this.textBoxLogger.AppendText(DateTime.Now.ToString() + " TX '" + TelegramFinalCommands + "' to: " + sender.Id.ToString() + "\r\n");
+                                    this.textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' " + "command  " + message.Text + "  not valid" + " ' to: " + sender.Id.ToString() + "\r\n");
                                 }));
-                                break;
+                                Logger.logTextLnU(DateTime.Now, String.Format("unknown command '{0}' from {1}", message.Text, sender.Id.ToString()));
+                                return;
                             }
-                        case "/hello": {
-                                string welcomeMessage = $"Welcome {message.From.Username} !{Environment.NewLine}My name is GrzTasmotaBot{Environment.NewLine}";
-                                _Bot.SendMessage(new SendMessageParams {
-                                    ChatId = sender.Id.ToString(),
-                                    Text = welcomeMessage
-                                });
-                                this.Invoke(new Action(() => {
-                                    this.textBoxLogger.AppendText(DateTime.Now.ToString() + " TX '" + welcomeMessage + "' to: " + sender.Id.ToString() + "\r\n");
-                                }));
-                                break;
-                            }
-                        case "/time": {
-                                _Bot.SendMessage(new SendMessageParams {
-                                    ChatId = sender.Id.ToString(),
-                                    Text = DateTime.Now.ToShortDateString() + " " + DateTime.Now.ToShortTimeString()
-                                });
-                                this.Invoke(new Action(() => {
-                                    this.textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' timestamp ' to: " + sender.Id.ToString() + "\r\n");
-                                }));
-                                break;
-                            }
-                        case "/location": {
-                                _Bot.SendLocation(sender, "50.69421", "3.17456");
-                                this.Invoke(new Action(() => {
-                                    this.textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' location ' to: " + sender.Id.ToString() + "\r\n");
-                                }));
-                                break;
-                            }
-                        default: {
-                                // treat other messages: loop thru device specific Telegram commands and execute the found one
-                                bool cmdFound = false;
-                                foreach ( var cmd in TelegramDeviceCommandList ) {
-                                    // check for match
-                                    if ( "/" + cmd == message.Text ) {
-                                        cmdFound = true;
-                                        // simply reply cmd to sender
-                                        _Bot.SendMessage(new SendMessageParams {
-                                            ChatId = sender.Id.ToString(),
-                                            Text = "roger " + cmd
-                                        });
-                                        this.Invoke(new Action(() => {
-                                            this.textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' roger " + cmd + "' to: " + sender.Id.ToString() + "\r\n");
-                                        }));
-                                        // parse the received cmd: get device, get command, execute command 
-                                        string[] arr = cmd.Split('_');
-                                        if ( arr.Length > 0 ) {
-                                            // so far we only know the Telegram friendly name
-                                            string teleName = arr[0];
-                                            // search Telegram friendly name in hosts list
-                                            for ( int i = 0; i < TasmotaHostsList.Count; i++ ) {
-                                                // once the real Tasmota host is known, select it in comboBoxTasmotaDevices
-                                                if ( teleName == TasmotaHostsList[i].teleName ) {
-                                                    this.Invoke(new Action(() => {
-                                                        this.comboBoxTasmotaDevices.SelectedIndex = i;
-                                                    }));
-                                                    break;
-                                                }
-                                            }
-                                            // parse the received Telegram command against the TasmotaSocket.methods array
-                                            for ( int i = 0; i < TasmotaSocket.methods.Length; i++ ) {
+                            // simply reply cmd to sender
+                            _Bot.SendMessage(new SendMessageParams {
+                                ChatId = sender.Id.ToString(),
+                                Text = "roger " + teleCmdMatch
+                            });
+                            this.Invoke(new Action(() => {
+                                this.textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' roger " + teleCmdMatch + "' to: " + sender.Id.ToString() + "\r\n");
+                            }));
+                            // parse the received cmd: get device, set it in UI, get command, execute command 
+                            string[] cmdSplit = teleCmdMatch.Split('_');
+                            if ( cmdSplit.Length > 0 ) {
 
-                                                // the method name shall end with one of the basic commands 
-                                                if ( TasmotaSocket.methods[i].Name.ToLower().EndsWith(arr[1]) ) {
+                                // so far we only know the Telegram friendly name
+                                string teleName = cmdSplit[0];
 
-                                                    // get host IP from UI thread
-                                                    string hostIp = "";
-                                                    this.Invoke(new Action(() => {
-                                                        hostIp = TasmotaHostsList[this.comboBoxTasmotaDevices.SelectedIndex].hostip;
-                                                    }));
-                                                    
-                                                    // execute requested command
-                                                    object retInvoke = TasmotaSocket.methods[i].Invoke(new TasmotaSocket(), new object[] { hostIp } );
-                                                    
-                                                    // get Tasmota status
-                                                    string response = TasmotaSocket.GetStatus(hostIp);
-
-                                                    // send status response to Telegram sender
-                                                    _Bot.SendMessage(new SendMessageParams {
-                                                        ChatId = sender.Id.ToString(),
-                                                        Text = cmd + " " + response
-                                                    });
-
-                                                    // local logger
-                                                    this.Invoke(new Action(() => {
-                                                        this.textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' " + cmd + " " + response + " ' to: " + sender.Id.ToString() + "\r\n");
-                                                    }));
-
-                                                    // update UI label
-                                                    this.Invoke(new Action(() => {
-                                                        this.labelSocket.Text = response;
-                                                    }));
-                                                }
-                                            }
-                                        }
-                                        break;
-                                    }
-                                }
-
-                                // error
-                                if ( !cmdFound ) {
-                                    _Bot.SendMessage(new SendMessageParams {
-                                        ChatId = sender.Id.ToString(),
-                                        Text = "command  " + message.Text + "  not valid"
-                                    });
+                                // find index of 'real Tasmota host name' in TasmotaHostsList with teleName as input
+                                int index = TasmotaHostsList.FindIndex(item => item.teleName == teleName);
+                                if ( index == -1 ) {
                                     this.Invoke(new Action(() => {
-                                        this.textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' " + "command  " + message.Text + "  not valid" + " ' to: " + sender.Id.ToString() + "\r\n");
+                                        this.textBoxLogger.AppendText(DateTime.Now.ToString() + " host not found " + sender.Id.ToString() + "\r\n");
                                     }));
-                                    Logger.logTextLnU(DateTime.Now, String.Format("unknown command '{0}' from {1}", message.Text, sender.Id.ToString()));
+                                    return;
                                 }
-                                break;
+                                // select Tasmota host in comboBoxTasmotaDevices --> changes UI's selected Tasmota device
+                                this.Invoke(new Action(() => {
+                                    this.comboBoxTasmotaDevices.SelectedIndex = index;
+                                }));
+
+                                // for the sake of mind, get host IP from UI thread via combobox
+                                string hostIp = "";
+                                this.Invoke(new Action(() => {
+                                    hostIp = TasmotaHostsList[this.comboBoxTasmotaDevices.SelectedIndex].hostip;
+                                }));
+
+                                // obtain device specific command name
+                                MethodInfo commandMatch = TasmotaSocket.methods.FirstOrDefault(item => item.Name.EndsWith(cmdSplit[1]));
+                                if ( commandMatch == null ) {
+                                    this.Invoke(new Action(() => {
+                                        this.textBoxLogger.AppendText(DateTime.Now.ToString() + "obtain real command name EXCEPTION" + sender.Id.ToString() + "\r\n");
+                                    }));
+                                    return;
+                                }
+
+                                // execute device specific command
+                                string response = "";
+                                switch ( commandMatch.Name ) {
+                                    // get Tasmota current power consumption
+                                    case "GetPower":
+                                        response = TasmotaSocket.GetPower(hostIp);
+                                        break;
+                                    // toggle power monitoring
+                                    case "TogglePowerMonitor":
+                                        this.Invoke(new Action(() => {
+                                            response = TasmotaSocket.TogglePowerMonitor(hostIp, this);
+                                        }));
+                                        break;
+                                    // clear power history data
+                                    case "ClearPowerHistory":
+                                        this.Invoke(new Action(() => {
+                                            TasmotaSocket.ClearPowerHistory(hostIp, this);
+                                        }));
+                                        break;
+                                    // send power graph image
+                                    case "GetPowerHistory":
+                                        // current power monitoring state
+                                        bool powerChartWasActive = this.checkBoxPower.Checked;
+                                        // outdated data note 
+                                        if ( !powerChartWasActive ) {
+                                            // turn power monitoring on
+                                            this.Invoke(new Action(() => {
+                                                this.checkBoxPower.Checked = true;
+                                                checkPower(null, null);
+                                            }));
+                                            _Bot.SendMessage(new SendMessageParams {
+                                                ChatId = sender.Id.ToString(),
+                                                Text = commandMatch.Name + ": power monitoring is turned off"
+                                            });
+                                        }
+                                        // grab image from power chart and send it 
+                                        try {
+                                            this.Invoke(new Action(() => {
+                                                // force UI refresh
+                                                timerUpdateHosts_Tick(null, null);
+                                                // get current power value
+                                                response = TasmotaSocket.GetPower(hostIp);
+                                                // local log
+                                                this.textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' " + teleCmdMatch + " PowerGraph to: " + sender.Id.ToString() + "\r\n");
+                                                // get image graph as byte array
+                                                byte[] buffer = TasmotaSocket.GetPowerHistory(hostIp, this);
+                                                // send image graph as picture
+                                                _Bot.SendPhoto(sender, buffer, "Power Graph", response + " W");
+                                            }));
+                                        } catch ( Exception ex ) {
+                                            this.Invoke(new Action(() => {
+                                                this.textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' " + teleCmdMatch + " <exception> to: " + sender.Id.ToString() + "\r\n");
+                                            }));
+                                        }
+                                        // set previous power monitoring state
+                                        if ( !powerChartWasActive ) {
+                                            // turn power monitoring ff
+                                            this.checkBoxPower.Checked = false;
+                                            // force UI refresh
+                                            this.Invoke(new Action(() => {
+                                                timerUpdateHosts_Tick(null, null);
+                                            }));
+                                        }
+                                        // need to return from here
+                                        return;
+                                    // get Tasmota status: covers GetStatus, SetOn, SetOff
+                                    default:
+                                        response = TasmotaSocket.GetStatus(hostIp, true);
+                                        break;
+                                }
+
+                                // send response to Telegram sender
+                                _Bot.SendMessage(new SendMessageParams {
+                                    ChatId = sender.Id.ToString(),
+                                    Text = commandMatch.Name + " " + response
+                                });
+
+                                // local logger
+                                this.Invoke(new Action(() => {
+                                    this.textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' " + teleCmdMatch + " " + response + " ' to: " + sender.Id.ToString() + "\r\n");
+                                }));
+
+                                // update UI label
+                                this.Invoke(new Action(() => {
+                                    this.labelSocket.Text = response;
+                                }));
                             }
-                    }
+                            break;
+                        }
+                }
             } catch ( Exception ex ) {
                 Logger.logTextLnU(DateTime.Now, "EXCEPTION OnMessage: " + ex.Message);
             }
