@@ -307,13 +307,20 @@ namespace GrzTasmotaBot {
                     this.toolStripStatusLabelMain.Text = "Tasmota device '" + TasmotaHostsList[this.comboBoxTasmotaDevices.SelectedIndex].name + "' not available.";
                 }
             }
-            // update power graph
-            if ( this.checkBoxPower.Checked ) {
-                // simulate click on power checkbox
-                checkPower(null, null);
+            // ping check
+            if ( TasmotaHostsList[this.comboBoxTasmotaDevices.SelectedIndex].pingable ) {
+                // only update power graph, if gadget is online - otherwise UI hangs
+                if ( this.checkBoxPower.Checked ) {
+                    // simulate click on power checkbox
+                    checkPower(null, null);
+                } else {
+                    // show current power value
+                    updatePower();
+                }
             } else {
-                // show current power value
-                updatePower();
+                // clear not pingable gadget chart 
+                this.ChartPower.Series[0].Points.Clear();
+                this.ChartPower.ChartAreas[0].AxisX.Minimum = 0;
             }
         }
 
