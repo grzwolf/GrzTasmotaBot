@@ -25,15 +25,15 @@ namespace GrzTasmotaBot {
         /// </summary>
         private void InitializeComponent() {
             this.components = new System.ComponentModel.Container();
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea2 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Legend legend2 = new System.Windows.Forms.DataVisualization.Charting.Legend();
-            System.Windows.Forms.DataVisualization.Charting.Series series2 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea1 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend1 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series1 = new System.Windows.Forms.DataVisualization.Charting.Series();
             this.tabPageOverview = new System.Windows.Forms.TabPage();
             this.tableLayoutPanelMain = new System.Windows.Forms.TableLayoutPanel();
             this.buttonSettings = new System.Windows.Forms.Button();
             this.groupBoxTasmotaSockets = new System.Windows.Forms.GroupBox();
+            this.checkBoxShowInTelegram = new System.Windows.Forms.CheckBox();
             this.buttonClearWattage = new System.Windows.Forms.Button();
-            this.labelPower = new System.Windows.Forms.Label();
             this.checkBoxPower = new System.Windows.Forms.CheckBox();
             this.ChartPower = new System.Windows.Forms.DataVisualization.Charting.Chart();
             this.labelSocket = new System.Windows.Forms.Label();
@@ -112,8 +112,8 @@ namespace GrzTasmotaBot {
             // groupBoxTasmotaSockets
             // 
             this.tableLayoutPanelMain.SetColumnSpan(this.groupBoxTasmotaSockets, 2);
+            this.groupBoxTasmotaSockets.Controls.Add(this.checkBoxShowInTelegram);
             this.groupBoxTasmotaSockets.Controls.Add(this.buttonClearWattage);
-            this.groupBoxTasmotaSockets.Controls.Add(this.labelPower);
             this.groupBoxTasmotaSockets.Controls.Add(this.checkBoxPower);
             this.groupBoxTasmotaSockets.Controls.Add(this.ChartPower);
             this.groupBoxTasmotaSockets.Controls.Add(this.labelSocket);
@@ -128,34 +128,37 @@ namespace GrzTasmotaBot {
             this.groupBoxTasmotaSockets.TabStop = false;
             this.groupBoxTasmotaSockets.Text = "Tasmota socket type devices";
             // 
+            // checkBoxShowInTelegram
+            // 
+            this.checkBoxShowInTelegram.AutoSize = true;
+            this.checkBoxShowInTelegram.Location = new System.Drawing.Point(192, 64);
+            this.checkBoxShowInTelegram.Name = "checkBoxShowInTelegram";
+            this.checkBoxShowInTelegram.Size = new System.Drawing.Size(70, 17);
+            this.checkBoxShowInTelegram.TabIndex = 12;
+            this.checkBoxShowInTelegram.Text = "Telegram";
+            this.checkBoxShowInTelegram.UseVisualStyleBackColor = true;
+            this.checkBoxShowInTelegram.Click += new System.EventHandler(this.checkBoxShowInTelegram_Click);
+            // 
             // buttonClearWattage
             // 
-            this.buttonClearWattage.Location = new System.Drawing.Point(208, 32);
+            this.buttonClearWattage.Font = new System.Drawing.Font("Microsoft Sans Serif", 6.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.buttonClearWattage.Location = new System.Drawing.Point(208, 40);
             this.buttonClearWattage.Name = "buttonClearWattage";
-            this.buttonClearWattage.Size = new System.Drawing.Size(64, 23);
+            this.buttonClearWattage.Size = new System.Drawing.Size(40, 18);
             this.buttonClearWattage.TabIndex = 11;
-            this.buttonClearWattage.Text = "clear data";
+            this.buttonClearWattage.Text = "clear";
             this.toolTipCommon.SetToolTip(this.buttonClearWattage, "clear all data > last 20");
             this.buttonClearWattage.UseVisualStyleBackColor = true;
             this.buttonClearWattage.Click += new System.EventHandler(this.ClearPower_Click);
             // 
-            // labelPower
-            // 
-            this.labelPower.AutoSize = true;
-            this.labelPower.Location = new System.Drawing.Point(192, 64);
-            this.labelPower.Name = "labelPower";
-            this.labelPower.Size = new System.Drawing.Size(71, 13);
-            this.labelPower.TabIndex = 10;
-            this.labelPower.Text = "not measured";
-            // 
             // checkBoxPower
             // 
             this.checkBoxPower.AutoSize = true;
-            this.checkBoxPower.Location = new System.Drawing.Point(192, 16);
+            this.checkBoxPower.Location = new System.Drawing.Point(192, 24);
             this.checkBoxPower.Name = "checkBoxPower";
-            this.checkBoxPower.Size = new System.Drawing.Size(76, 17);
+            this.checkBoxPower.Size = new System.Drawing.Size(55, 17);
             this.checkBoxPower.TabIndex = 9;
-            this.checkBoxPower.Text = "Power [W]";
+            this.checkBoxPower.Text = "Graph";
             this.checkBoxPower.UseVisualStyleBackColor = true;
             this.checkBoxPower.Click += new System.EventHandler(this.checkPower);
             // 
@@ -163,18 +166,18 @@ namespace GrzTasmotaBot {
             // 
             this.ChartPower.BorderlineColor = System.Drawing.Color.DimGray;
             this.ChartPower.BorderlineDashStyle = System.Windows.Forms.DataVisualization.Charting.ChartDashStyle.Solid;
-            chartArea2.Name = "ChartArea1";
-            this.ChartPower.ChartAreas.Add(chartArea2);
-            legend2.Name = "Legend1";
-            this.ChartPower.Legends.Add(legend2);
+            chartArea1.Name = "ChartArea1";
+            this.ChartPower.ChartAreas.Add(chartArea1);
+            legend1.Name = "Legend1";
+            this.ChartPower.Legends.Add(legend1);
             this.ChartPower.Location = new System.Drawing.Point(280, 8);
             this.ChartPower.Name = "ChartPower";
-            series2.ChartArea = "ChartArea1";
-            series2.ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.FastLine;
-            series2.IsVisibleInLegend = false;
-            series2.Legend = "Legend1";
-            series2.Name = "W";
-            this.ChartPower.Series.Add(series2);
+            series1.ChartArea = "ChartArea1";
+            series1.ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.FastLine;
+            series1.IsVisibleInLegend = false;
+            series1.Legend = "Legend1";
+            series1.Name = "W";
+            this.ChartPower.Series.Add(series1);
             this.ChartPower.Size = new System.Drawing.Size(420, 80);
             this.ChartPower.TabIndex = 8;
             // 
@@ -413,10 +416,10 @@ namespace GrzTasmotaBot {
         private System.Windows.Forms.CheckBox checkBoxAutoSearch;
         private System.Windows.Forms.Timer timerAppStatus;
         private System.Windows.Forms.DataVisualization.Charting.Chart ChartPower;
-        private System.Windows.Forms.Label labelPower;
         private System.Windows.Forms.CheckBox checkBoxPower;
         private System.Windows.Forms.Button buttonClearWattage;
         private System.Windows.Forms.ToolTip toolTipCommon;
+        private System.Windows.Forms.CheckBox checkBoxShowInTelegram;
     }
 }
 

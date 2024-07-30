@@ -43,10 +43,31 @@ namespace GrzTasmotaBot {
         int _telegramLiveTickErrorCount = 0;                          // error handling 
         bool _runPing = false;                                        // error handling
         int _telegramRestartCounter = 0;                              // error handling
+        public static class TelegramConfirmToken {                    // confirm a potential dangerous message   
+            public static String Cmd { get; set; }
+            public static String IP { get; set; }
+            public static String FullCmd { get; set; }
+            public static DateTime Generated { get; set; }
+            public static void Set(string cmd, string ip, string full, DateTime generated) {
+                Cmd = cmd;
+                IP = ip;
+                FullCmd = full;
+                Generated = generated;
+            }
+            public static void Reset() {
+                Cmd = "";
+                IP = "";
+                FullCmd = "";
+                Generated = new DateTime(1900, 1, 1);
+            }
+        }
 
         public MainForm() {
 
             InitializeComponent();
+
+            // reset any confirmation token
+            TelegramConfirmToken.Reset();
 
             // add "about entry" etc. to app's system menu
             SetupSystemMenu();
@@ -124,14 +145,12 @@ namespace GrzTasmotaBot {
         private void MainForm_FormClosing(object sender, FormClosingEventArgs e) {
             // no matter what, even if it was not started
             this.timerUpdateHosts.Stop();
-            // current app props
+            // current app props, actually just form size & location
             updateSettingsFromAppProperties();
             // shall INI get updated with the current session's TasmotaHostsList                
             bool updateHostsList = IsUpdateSettingsHostsListDue();
-            // update property grid with 
-            if ( updateHostsList ) {
-                Settings.setPropertyGridToHostsList(TasmotaHostsList);
-            }
+            // update property grid with data perhaps changed during app session
+            Settings.setPropertyGridToHostsList(TasmotaHostsList);
             // write settings to INI
             Settings.writePropertyGridToIni(updateHostsList);
             // if app live cycle comes here, there was no app crash, write such info to INI for next startup log
@@ -207,7 +226,7 @@ namespace GrzTasmotaBot {
         private void updatePower() {
             // get current power value
             string wattageStr = TasmotaSocket.GetPower(TasmotaHostsList[this.comboBoxTasmotaDevices.SelectedIndex].hostip);
-            this.labelPower.Text = wattageStr + " Watt";
+            this.checkBoxPower.Text = "Graph " + wattageStr + " W";
             if ( this.checkBoxPower.Checked ) {
                 // update chart
                 this.ChartPower.Series["W"].Points.Add(new System.Windows.Forms.DataVisualization.Charting.DataPoint(this.ChartPower.Series["W"].Points.Count, Int32.Parse(wattageStr)));
@@ -217,6 +236,8 @@ namespace GrzTasmotaBot {
             }
         }
         private void checkPower(object sender, EventArgs e) {
+            // update 'show graph status' in TasmotaHostsList
+            TasmotaHostsList[this.comboBoxTasmotaDevices.SelectedIndex].graph = this.checkBoxPower.Checked;
             if ( this.checkBoxPower.Checked ) {
                 // chart starts clean  
                 this.ChartPower.Series["W"].Points.Clear();
@@ -301,6 +322,9 @@ namespace GrzTasmotaBot {
                     if ( list[0].pingable ) {
                         // enable device specific controls
                         this.groupBoxTasmotaSockets.Enabled = true;
+                        // graph status & show in Telegram 
+                        this.checkBoxPower.Checked = TasmotaHostsList[this.comboBoxTasmotaDevices.SelectedIndex].graph;
+                        this.checkBoxShowInTelegram.Checked = TasmotaHostsList[this.comboBoxTasmotaDevices.SelectedIndex].telegram;
                         // get device status
                         this.labelSocket.Text = TasmotaSocket.GetStatus(TasmotaHostsList[this.comboBoxTasmotaDevices.SelectedIndex].hostip);
                     }
@@ -338,6 +362,8 @@ namespace GrzTasmotaBot {
                 this.toolStripStatusLabelMain.Text = "refreshing";
                 // refreshes combobox with Tasmota devices
                 await UpdateHostsOnUI();
+                // update property grid
+                Settings.setPropertyGridToHostsList(TasmotaHostsList);
                 // fallback check, just in case the index is not valid: should not happen at all
                 if ( this.comboBoxTasmotaDevices.SelectedIndex == -1 ) {
                     this.comboBoxTasmotaDevices.SelectedIndex = 0;
@@ -406,6 +432,8 @@ namespace GrzTasmotaBot {
                     if ( !found ) {
                         TasmotaHostsList.Add(host);
                         TasmotaHostsList[TasmotaHostsList.Count - 1].pingable = true;
+                        TasmotaHostsList[TasmotaHostsList.Count - 1].graph = false;
+                        TasmotaHostsList[TasmotaHostsList.Count - 1].telegram = false;
                     }
                 }
             } else {
@@ -426,7 +454,7 @@ namespace GrzTasmotaBot {
                 // update combobox
                 this.comboBoxTasmotaDevices.Items.Add(host.name + " - " + host.hostip + " - " + host.type + " - " + (host.pingable ? "online" : "<offline>"));
                 // build a Tasmota device specific commands list for each host to be later used in Telgram's receiver parser
-                if ( host.type == TasmotaDeviceFilter ) {
+                if ( host.type == TasmotaDeviceFilter && host.telegram ) {
                     TelegramDeviceCommandList.AddRange(Tools.GetBasicSocketCommands(host.teleName, TasmotaSocket.TASMOTA_SOCKET_COMMANDS));
                 }
             }
@@ -481,6 +509,8 @@ namespace GrzTasmotaBot {
             public string type;     // Tasmota device type name --> TasmotaDeviceType
             public string teleName; // Telegram Tasmota name deviates from device Tasmota name, not allowed: a)  " "  b) "#" 
             public bool   pingable; // a device might temprarily not pingable
+            public bool   graph;    // show data graph
+            public bool   telegram; // propagate device to Telegram
             public host(string ip, string GETstr) {
                 this.hostip = ip;
                 this.GETstr = GETstr;
@@ -605,7 +635,7 @@ namespace GrzTasmotaBot {
                     // build a Tasmota device specific commands list for each host to be later used in Telgram's receiver parser
                     if ( host.type == TasmotaDeviceFilter ) {
                         // only pingable devices
-                        if ( host.pingable ) {
+                        if ( host.pingable && host.telegram ) {
                             TelegramDeviceCommandList.AddRange(Tools.GetBasicSocketCommands(host.teleName, TasmotaSocket.TASMOTA_SOCKET_COMMANDS));
                         }
                     }
@@ -677,7 +707,9 @@ namespace GrzTasmotaBot {
                 // find app matches in INI
                 bool[] matches1 = new bool[TasmotaHostsList.Count];
                 for ( int i = 0; i < TasmotaHostsList.Count; i++ ) {
-                    string hostStr = TasmotaHostsList[i].hostip + "," + TasmotaHostsList[i].name;
+                    string hostStr = TasmotaHostsList[i].hostip + "," +
+                        TasmotaHostsList[i].name + "," +
+                        TasmotaHostsList[i].type;
                     foreach ( var hostIni in Settings.ListHosts ) {
                         if ( hostIni.Contains(hostStr) ) {
                             matches1[i] = true;
@@ -689,7 +721,7 @@ namespace GrzTasmotaBot {
                 bool[] matches2 = new bool[Settings.ListHosts.Count];
                 for ( int i = 0; i < Settings.ListHosts.Count; i++ ) {
                     foreach ( var host in TasmotaHostsList ) {
-                        string appStr = host.hostip + "," + host.name;
+                        string appStr = host.hostip + "," + host.name + "," + host.type;
                         if ( Settings.ListHosts[i].Contains(appStr) ) {
                             matches2[i] = true;
                             break;
@@ -1052,6 +1084,7 @@ namespace GrzTasmotaBot {
             this.Invoke(new Action(() => {
                 this.textBoxLogger.AppendText(DateTime.Now.ToString() + " RX '" + message.Text + "' from: " + sender.Id.ToString() + "\r\n");
             }));
+
             // allow whitelist entries only
             if ( Settings.UseTelegramWhitelist ) {
                 bool senderIsWhitelisted = false;
@@ -1072,6 +1105,17 @@ namespace GrzTasmotaBot {
                 AutoMessageBox.Show("Consider using Telegram whitelist features.", "Security Warning", 5000);
             }
 
+            // any command other than 'yes' cancels a pending operation
+            if ( !message.Text.ToLower().Equals("yes") ) {
+                if ( TelegramConfirmToken.Cmd.Length != 0 ) {
+                    _Bot.SendMessage(new SendMessageParams {
+                        ChatId = sender.Id.ToString(),
+                        Text = TelegramConfirmToken.FullCmd + " confirmation cancelled due to other command"
+                    });
+                }
+                TelegramConfirmToken.Reset();
+            }
+
             try {
                 // received message check
                 if ( string.IsNullOrEmpty(message.Text) ) {
@@ -1079,6 +1123,59 @@ namespace GrzTasmotaBot {
                 }
                 // received message parser: at first, handle standard messages 
                 switch ( message.Text.ToLower() ) {
+                    // confirmation for last SetOn or SetOff command
+                    case "yes": {
+                            this.Invoke(new Action(() => {
+                                this.textBoxLogger.AppendText(DateTime.Now.ToString() + " RX yes from " + sender.Id.ToString() + "\r\n");
+                            }));
+                            // exec the confirmed command
+                            if ( TelegramConfirmToken.Cmd.Length > 0 ) {
+                                // consider token expiration 
+                                if ( (DateTime.Now - TelegramConfirmToken.Generated).TotalSeconds < 120 ) {
+                                    string response = "";
+                                    switch ( TelegramConfirmToken.Cmd ) {
+                                        // turn Tasmota switch on
+                                        case "SetOn":
+                                            TasmotaSocket.SetOn(TelegramConfirmToken.IP);
+                                            response = TasmotaSocket.GetStatus(TelegramConfirmToken.IP, true);
+                                            break;
+                                        // turn Tasmota switch off
+                                        case "SetOff":
+                                            TasmotaSocket.SetOff(TelegramConfirmToken.IP);
+                                            response = TasmotaSocket.GetStatus(TelegramConfirmToken.IP, true);
+                                            break;
+                                    }
+                                    // send response to Telegram sender
+                                    _Bot.SendMessage(new SendMessageParams {
+                                        ChatId = sender.Id.ToString(),
+                                        Text = TelegramConfirmToken.FullCmd + " " + response
+                                    });
+                                    // local logger
+                                    this.Invoke(new Action(() => {
+                                        this.textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' " + TelegramConfirmToken.Cmd + " " + response + " ' to: " + sender.Id.ToString() + "\r\n");
+                                    }));
+                                    // update UI label
+                                    this.Invoke(new Action(() => {
+                                        this.labelSocket.Text = response;
+                                    }));
+                                } else {
+                                    // send response to Telegram sender
+                                    _Bot.SendMessage(new SendMessageParams {
+                                        ChatId = sender.Id.ToString(),
+                                        Text = TelegramConfirmToken.FullCmd + " confirmation period was expired >3 minutes"
+                                    });
+                                }
+                                // confirmation not needed anymore
+                                TelegramConfirmToken.Reset();
+                            } else {
+                                // send response to Telegram sender
+                                _Bot.SendMessage(new SendMessageParams {
+                                    ChatId = sender.Id.ToString(),
+                                    Text = "command not valid"
+                                }); 
+                            }
+                            break;
+                        }
                     // help: sends all vailable commands to caller
                     case "/help": {
                             _Bot.SendMessage(new SendMessageParams {
@@ -1124,7 +1221,7 @@ namespace GrzTasmotaBot {
                     // handle device specific messages: get the device specific Telegram command and execute it
                     default: {
                             string teleCmdMatch = TelegramDeviceCommandList.FirstOrDefault(cmd => "/" + cmd == message.Text);
-                            // check for match
+                            // check for match, reject if not found
                             if ( teleCmdMatch == null ) {
                                 // we have a 'no Telegram command' error ==> get out and return
                                 _Bot.SendMessage(new SendMessageParams {
@@ -1160,6 +1257,13 @@ namespace GrzTasmotaBot {
                                     }));
                                     return;
                                 }
+                                // reject command execution, if "show in Telegram" is disabled: should not happen at all
+                                if ( !TasmotaHostsList[index].telegram ) {
+                                    this.Invoke(new Action(() => {
+                                        this.textBoxLogger.AppendText(DateTime.Now.ToString() + " host not remote controllable " + sender.Id.ToString() + "\r\n");
+                                    }));
+                                    return;
+                                }
                                 // select Tasmota host in comboBoxTasmotaDevices --> changes UI's selected Tasmota device
                                 this.Invoke(new Action(() => {
                                     this.comboBoxTasmotaDevices.SelectedIndex = index;
@@ -1183,6 +1287,28 @@ namespace GrzTasmotaBot {
                                 // execute device specific command
                                 string response = "";
                                 switch ( commandMatch.Name ) {
+                                    // allow to turn a Tasmota switch on after confirmation
+                                    case "SetOn":
+                                        TelegramConfirmToken.Set("SetOn", hostIp, teleCmdMatch, DateTime.Now);
+                                        response = teleCmdMatch + " answer to confirm with: yes";
+                                        _Bot.SendMessage(new SendMessageParams {
+                                            ChatId = sender.Id.ToString(),
+                                            Text = response
+                                        });
+                                        return;
+                                    // allow to turn a Tasmota switch off after confirmation
+                                    case "SetOff":
+                                        TelegramConfirmToken.Set("SetOff", hostIp, teleCmdMatch, DateTime.Now);
+                                        response = teleCmdMatch + " answer to confirm with: yes";
+                                        _Bot.SendMessage(new SendMessageParams {
+                                            ChatId = sender.Id.ToString(),
+                                            Text = response
+                                        });
+                                        return;
+                                    // get Tasmota switch status
+                                    case "GetStatus":
+                                        response = TasmotaSocket.GetStatus(hostIp, true);
+                                        break;
                                     // get Tasmota current power consumption
                                     case "GetPower":
                                         response = TasmotaSocket.GetPower(hostIp);
@@ -1245,9 +1371,9 @@ namespace GrzTasmotaBot {
                                         }
                                         // need to return from here
                                         return;
-                                    // get Tasmota status: covers GetStatus, SetOn, SetOff
+                                    // error
                                     default:
-                                        response = TasmotaSocket.GetStatus(hostIp, true);
+                                        response = "error";
                                         break;
                                 }
 
@@ -1488,6 +1614,12 @@ namespace GrzTasmotaBot {
             }
         }
 
+        // show in Telegram or not
+        private void checkBoxShowInTelegram_Click(object sender, EventArgs e) {
+            // update 'show in Telegram status' in TasmotaHostsList
+            TasmotaHostsList[this.comboBoxTasmotaDevices.SelectedIndex].telegram = this.checkBoxShowInTelegram.Checked;
+        }
+
     }
 
     // --------------------------------- app settings class --------------------------------------------------------------
@@ -1676,6 +1808,9 @@ namespace GrzTasmotaBot {
                 if ( strHostFull != ",," ) {
                     string[] arr = strHostFull.Split(',');
                     String strHostSplit = String.Format("{0},{1},{2}", arr[0], arr[1], arr[2]);
+                    // older INI could come w/o such info
+                    strHostSplit += arr.Count() > 3 ? String.Format(",{0}", arr[3]) : ",false";
+                    strHostSplit += arr.Count() > 4 ? String.Format(",{0}", arr[4]) : ",false";
                     // build list of Hosts
                     ListHosts.Add(strHostSplit);
                 } else {
@@ -1724,10 +1859,8 @@ namespace GrzTasmotaBot {
             // Telegram bot authentication token
             ini.IniWriteValue(iniSection, "BotAuthenticationToken", BotAuthenticationToken);
             // write Tasmota hosts from PropertyGrid array to INI
-            if ( updateHosts ) {
-                for ( int i = 0; i < ListHosts.Count; i++ ) {
-                    ini.IniWriteValue("Tasmota section", "host" + i.ToString(), ListHosts[i]);
-                }
+            for ( int i = 0; i < ListHosts.Count; i++ ) {
+                 ini.IniWriteValue("Tasmota section", "host" + i.ToString(), ListHosts[i]);
             }
             // hosts update interval 
             ini.IniWriteValue("Tasmota section", "HostsUpdateInterval", HostsUpdateInterval.ToString());
@@ -1751,14 +1884,16 @@ namespace GrzTasmotaBot {
                 list[i].GETstr = "";
                 list[i].name = arr[1];
                 list[i].type = arr[2];
+                list[i].graph = arr.Count() > 3 ? Boolean.Parse(arr[3]) : false;
+                list[i].telegram = arr.Count() > 4 ? Boolean.Parse(arr[4]) : false;
             }
             return list;
         }
-        // set the settings PropertyGrid to the list of hosts provided by the ROIs edit dialog
+        // set the settings PropertyGrid to the list of hosts provided by the edit dialog
         public void setPropertyGridToHostsList(List<MainForm.host> list) {
             ListHosts = new BindingList<string>();
             for ( int i = 0; i < list.Count; i++ ) {
-                ListHosts.Add(list[i].hostip + "," + list[i].name + "," + list[i].type);
+                ListHosts.Add(list[i].hostip + "," + list[i].name + "," + list[i].type + "," + list[i].graph + "," + list[i].telegram);
             }
         }
 

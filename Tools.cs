@@ -39,11 +39,27 @@ namespace GrzTools {
 
         // devices commands to be sent with Telegram
         public static string FormatTelegramDecicesCommands(List<String> cmdList, int cmdCount) {
-            var retVal = "\n\n";
-            var ndx = 0;
+            var retVal = "\n\n\n";
+            // prepare for extra \n
+            var fst = "";
+            try {
+                fst = cmdList[0].Split('_')[0];
+            } catch (Exception) {;}
             foreach ( var cmd in cmdList ) {
-                ndx++;
-                retVal += "/" + cmd + (ndx % cmdCount == 0 ? "\n\n" : "\n");
+                // a device change shall add an extra \n
+                var cur = "";
+                try {
+                    cur = cmd.Split('_')[0];
+                } catch ( Exception ) {; }
+                bool newDev = false;
+                if ( !cur.Equals(fst) ) {
+                    newDev = true;
+                    fst = cur;
+                }
+                if ( newDev ) {
+                    retVal += "\n";
+                }
+                retVal += "/" + cmd + "\n\n";
             }
             return retVal;
         }
