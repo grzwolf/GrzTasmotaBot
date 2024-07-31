@@ -135,6 +135,8 @@ namespace GrzTasmotaBot {
                     this.checkBoxAutoSearch.Text = "auto " + Settings.HostsUpdateInterval.ToString() + "s";
                     this.timerUpdateHosts.Interval = Settings.HostsUpdateInterval * 1000;
                     this.timerUpdateHosts.Start();
+                } else {
+                    MessageBox.Show("Auto update interval is currently 0, you may change it in Settings.", "Note");
                 }
             } else {
                 this.timerUpdateHosts.Stop();
