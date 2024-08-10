@@ -653,8 +653,29 @@ namespace GrzTasmotaBot {
             }
         }
 
+        // right click on tab header shall allow to open a Tasmota website in a fully fledged browser
+        private void tabControlDevices_MouseDown(object sender, MouseEventArgs e) {
+            if ( e.Button == MouseButtons.Right ) {
+                for ( int i = 0; i < tabControlDevices.TabCount; i++ ) {
+                    if ( tabControlDevices.GetTabRect(i).Contains(e.Location) ) {
+                        Console.WriteLine("Right Clicked on tab {0}", i);
+                        var nameTab = this.tabControlDevices.TabPages[i].Text;
+                        foreach ( var host in TasmotaHostsList ) {
+                            if ( host.name == nameTab ) {
+                                var result = MessageBox.Show("Open device in a separate Webbrowser?", "Question", MessageBoxButtons.OKCancel);
+                                if ( result == DialogResult.OK ) {
+                                    System.Diagnostics.Process.Start("http://" + host.hostip);
+                                }
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // compare 2x List<host> return if different
-        bool AreHostListsDifferent(List<host>listOne, List<host> listTwo) {
+        bool AreHostListsDifferent(List<host> listOne, List<host> listTwo) {
             bool different = false;
             if ( listOne.Count != listTwo.Count ) {
                 different = true;

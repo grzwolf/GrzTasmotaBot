@@ -331,6 +331,7 @@ namespace GrzTasmotaBot {
             this.tabControlDevices.SelectedIndex = 0;
             this.tabControlDevices.Size = new System.Drawing.Size(724, 514);
             this.tabControlDevices.TabIndex = 1;
+            this.tabControlDevices.MouseDown += new System.Windows.Forms.MouseEventHandler(this.tabControlDevices_MouseDown);
             // 
             // timerCheckTelegramLiveTick
             // 
