@@ -1631,43 +1631,65 @@ namespace GrzTasmotaBot {
         private string iniSection = "GrzTasmotaBot";
 
         // custom form to show text inside a property grid
-        [Editor(typeof(FooEditor), typeof(System.Drawing.Design.UITypeEditor))]
-        class FooEditor : System.Drawing.Design.UITypeEditor {
+        [Editor(typeof(TextShow), typeof(System.Drawing.Design.UITypeEditor))]
+        class TextShow : System.Drawing.Design.UITypeEditor {
             public override System.Drawing.Design.UITypeEditorEditStyle GetEditStyle(ITypeDescriptorContext context) {
                 return System.Drawing.Design.UITypeEditorEditStyle.Modal;
             }
             public override object EditValue(ITypeDescriptorContext context, System.IServiceProvider provider, object value) {
                 System.Windows.Forms.Design.IWindowsFormsEditorService svc = provider.GetService(typeof(System.Windows.Forms.Design.IWindowsFormsEditorService)) as System.Windows.Forms.Design.IWindowsFormsEditorService;
-                String foo = value as String;
-                if ( svc != null && foo != null ) {
-                    using ( FooForm form = new FooForm() ) {
-                        form.Value = foo;
+                String title = "";
+                String txt = "";
+                var type = value.GetType();
+                if ( type.IsGenericType && typeof(System.ComponentModel.BindingList<string>).IsAssignableFrom(type) ) {
+                    title = "Hosts list (r/o)";
+                    foreach ( string item in value as BindingList<string> ) {
+                        txt += item + "\r\n";
+                    }
+                } else {
+                    if ( type.FullName == "System.String" ) {
+                        title = "Link";
+                        txt = value as String;
+                    } else {
+                        txt = "error reading parameter 'value'";
+                    }
+                }
+                if ( svc != null && txt != null ) {
+                    using ( TxtForm form = new TxtForm(title) ) {
+                        form.Text = title;
+                        form.Value = txt;
+                        form.Size = new Size(500, 500);
+                        form.StartPosition = FormStartPosition.Manual;
+                        form.Location = new Point(Settings.ActiveForm.Location.X + 100, Settings.ActiveForm.Location.Y + 100);
                         svc.ShowDialog(form);
                     }
                 }
                 return value;
             }
         }
-        class FooForm : Form {
+        class TxtForm : Form {
             private TextBox textbox;
-            private Button okButton;
-            public FooForm() {
+            private Button cancelButton;
+            public TxtForm(string title) {
                 textbox = new TextBox();
                 textbox.Multiline = true;
                 textbox.Dock = DockStyle.Fill;
                 textbox.WordWrap = false;
                 textbox.Font = new Font(FontFamily.GenericMonospace, textbox.Font.Size);
                 textbox.ScrollBars = ScrollBars.Both;
+                textbox.ReadOnly = true;
                 Controls.Add(textbox);
-                okButton = new Button();
-                okButton.Text = "OK";
-                okButton.Dock = DockStyle.Bottom;
-                okButton.DialogResult = DialogResult.OK;
-                Controls.Add(okButton);
+                cancelButton = new Button();
+                cancelButton.Text = "Cancel";
+                cancelButton.Dock = DockStyle.Bottom;
+                cancelButton.DialogResult = DialogResult.Cancel;
+                Controls.Add(cancelButton);
             }
             public string Value {
-                get { return textbox.Text; }
-                set { textbox.Text = value; }
+                set { 
+                    textbox.Text = value;
+                    textbox.Select(0, 0);
+                }
             }
         }
 
@@ -1730,12 +1752,13 @@ namespace GrzTasmotaBot {
         public BindingList<string> TelegramWhitelist { get; set; }
         [CategoryAttribute("Telegram")]
         [Description("Open link in browser to learn, how to use a Telegram Bot")]
-        [Editor(typeof(FooEditor), typeof(System.Drawing.Design.UITypeEditor))]
+        [Editor(typeof(TextShow), typeof(System.Drawing.Design.UITypeEditor))]
         public String HowToUseTelegram { get; set; }
 
         [CategoryAttribute("Tasmota hosts")]
         [DisplayName("ListHosts")]
         [Description("List all Tasmota hosts (not editable)")]
+        [Editor(typeof(TextShow), typeof(System.Drawing.Design.UITypeEditor))]
         public BindingList<string> ListHosts { get; set; }
         [CategoryAttribute("Tasmota hosts")]
         [DisplayName("Auto hosts update interval")]
