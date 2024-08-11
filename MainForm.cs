@@ -230,6 +230,10 @@ namespace GrzTasmotaBot {
             string wattageStr = TasmotaSocket.GetPower(TasmotaHostsList[this.comboBoxTasmotaDevices.SelectedIndex].hostip);
             this.checkBoxPower.Text = "Graph " + wattageStr + " W";
             if ( this.checkBoxPower.Checked ) {
+                // reduce data point count to 200, if number is larger than 500
+                if ( this.ChartPower.Series["W"].Points.Count > 500 ) {
+                    ClearPowerHistory(200);
+                }
                 // update chart
                 this.ChartPower.Series["W"].Points.Add(new System.Windows.Forms.DataVisualization.Charting.DataPoint(this.ChartPower.Series["W"].Points.Count, Int32.Parse(wattageStr)));
                 // update data file
@@ -276,7 +280,7 @@ namespace GrzTasmotaBot {
                 ClearPowerHistory();
             }
         }
-        void ClearPowerHistory() {
+        void ClearPowerHistory(int countToDelete = 20) {
             // clear data list 
             gadgetDataList.Clear();
             // fill data list from data file
@@ -286,8 +290,8 @@ namespace GrzTasmotaBot {
                     .Split(new[] { "," }, StringSplitOptions.RemoveEmptyEntries)
                     .ToList();
             }
-            // leave last 20 data in list untouched
-            gadgetDataList.RemoveRange(0, Math.Min(Math.Max(0, gadgetDataList.Count - 20), gadgetDataList.Count));
+            // leave last 'countToDelete' data in list untouched
+            gadgetDataList.RemoveRange(0, Math.Min(Math.Max(0, gadgetDataList.Count - countToDelete), gadgetDataList.Count));
             // delete data file
             System.IO.File.Delete(gadgetDataFileName);
             // chart start clean
