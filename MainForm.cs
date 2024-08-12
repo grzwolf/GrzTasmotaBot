@@ -1097,8 +1097,10 @@ namespace GrzTasmotaBot {
                 _Bot.OnLiveTick -= OnLiveTick;
                 _Bot.Stop();
                 _Bot = null;
-                Logger.logTextLnU(DateTime.Now, "OnError: Telegram connect error, now shut down - trying to restart in 5 min");
-                this.timerTelegramRestart.Start();
+                this.Invoke(new Action(() => {
+                    this.timerTelegramRestart.Start();
+                    Logger.logTextLnU(DateTime.Now, "OnError: Telegram connect error, now shut down - trying to restart in 5 min");
+                }));
             } else {
                 Logger.logTextLnU(DateTime.Now, "OnError: _Bot == null, but OnError still active");
             }
