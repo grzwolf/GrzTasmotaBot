@@ -42,7 +42,7 @@ namespace GrzTasmotaBot {
             this.buttonSocketOn = new System.Windows.Forms.Button();
             this.groupBoxLogger = new System.Windows.Forms.GroupBox();
             this.buttonClearLogger = new System.Windows.Forms.Button();
-            this.textBoxLogger = new System.Windows.Forms.TextBox();
+            textBoxLogger = new System.Windows.Forms.TextBox();
             this.groupBoxAllTasmotas = new System.Windows.Forms.GroupBox();
             this.checkBoxAutoSearch = new System.Windows.Forms.CheckBox();
             this.comboBoxTasmotaDevices = new System.Windows.Forms.ComboBox();
@@ -224,7 +224,7 @@ namespace GrzTasmotaBot {
             // 
             this.tableLayoutPanelMain.SetColumnSpan(this.groupBoxLogger, 2);
             this.groupBoxLogger.Controls.Add(this.buttonClearLogger);
-            this.groupBoxLogger.Controls.Add(this.textBoxLogger);
+            this.groupBoxLogger.Controls.Add(textBoxLogger);
             this.groupBoxLogger.Dock = System.Windows.Forms.DockStyle.Fill;
             this.groupBoxLogger.Location = new System.Drawing.Point(3, 263);
             this.groupBoxLogger.Name = "groupBoxLogger";
@@ -245,15 +245,15 @@ namespace GrzTasmotaBot {
             // 
             // textBoxLogger
             // 
-            this.textBoxLogger.Dock = System.Windows.Forms.DockStyle.Top;
-            this.textBoxLogger.Font = new System.Drawing.Font("Courier New", 8.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.textBoxLogger.Location = new System.Drawing.Point(3, 16);
-            this.textBoxLogger.Multiline = true;
-            this.textBoxLogger.Name = "textBoxLogger";
-            this.textBoxLogger.ScrollBars = System.Windows.Forms.ScrollBars.Both;
-            this.textBoxLogger.Size = new System.Drawing.Size(698, 136);
-            this.textBoxLogger.TabIndex = 9;
-            this.textBoxLogger.WordWrap = false;
+            textBoxLogger.Dock = System.Windows.Forms.DockStyle.Top;
+            textBoxLogger.Font = new System.Drawing.Font("Courier New", 8.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            textBoxLogger.Location = new System.Drawing.Point(3, 16);
+            textBoxLogger.Multiline = true;
+            textBoxLogger.Name = "textBoxLogger";
+            textBoxLogger.ScrollBars = System.Windows.Forms.ScrollBars.Both;
+            textBoxLogger.Size = new System.Drawing.Size(698, 136);
+            textBoxLogger.TabIndex = 9;
+            textBoxLogger.WordWrap = false;
             // 
             // groupBoxAllTasmotas
             // 
@@ -351,7 +351,7 @@ namespace GrzTasmotaBot {
             // timerUpdateHosts
             // 
             this.timerUpdateHosts.Interval = 30000;
-            this.timerUpdateHosts.Tag = "0";
+            this.timerUpdateHosts.Tag = "10";
             this.timerUpdateHosts.Tick += new System.EventHandler(this.timerUpdateHosts_Tick);
             // 
             // timerAppStatus
@@ -409,7 +409,7 @@ namespace GrzTasmotaBot {
         private System.Windows.Forms.GroupBox groupBoxTasmotaSockets;
         private System.Windows.Forms.GroupBox groupBoxLogger;
         private System.Windows.Forms.Button buttonClearLogger;
-        private System.Windows.Forms.TextBox textBoxLogger;
+        public static System.Windows.Forms.TextBox textBoxLogger;
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanelMain;
         private System.Windows.Forms.GroupBox groupBoxAllTasmotas;
         private System.Windows.Forms.Timer timerTelegramRestart;

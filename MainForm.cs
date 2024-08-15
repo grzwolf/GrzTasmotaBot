@@ -42,6 +42,7 @@ namespace GrzTasmotaBot {
         int _telegramOnErrorCount = 0;                                // error handling
         int _telegramLiveTickErrorCount = 0;                          // error handling 
         bool _runPing = false;                                        // error handling
+        bool PING_ACTIVE = false;                                     // error handling
         int _telegramRestartCounter = 0;                              // error handling
         public static class TelegramConfirmToken {                    // confirm a potential dangerous message   
             public static String Cmd { get; set; }
@@ -125,6 +126,8 @@ namespace GrzTasmotaBot {
             }
             // first app status
             this.timerAppStatus_Tick(null, null);
+            // start full device search
+            this.timerUpdateHosts_Tick(null, null);
         }
 
         // auto search Tasmota devices from UI
@@ -189,7 +192,7 @@ namespace GrzTasmotaBot {
                             Text = "test"
                         });
                         this.Invoke(new Action(() => {
-                            this.textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' test ' to: " + chatid + "\r\n");
+                            textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' test ' to: " + chatid + "\r\n");
                         }));
                     } else {
                         MessageBox.Show("Telegram bot or whitelist.", "Missing");
@@ -210,7 +213,7 @@ namespace GrzTasmotaBot {
 
         // clear Telegram messages logger
         private void buttonClearLogger_Click(object sender, EventArgs e) {
-            this.textBoxLogger.Text = "";
+            textBoxLogger.Text = "";
         }
 
         // Tasmota sockets UI controls
@@ -427,6 +430,30 @@ namespace GrzTasmotaBot {
                 foreach (var host in hostListMod ) {
                     bool found = false;
                     for ( int i = 0; i < TasmotaHostsList.Count; i++ ) {
+                        // a strong indicator, that a device with identical IP was renamed
+                        if ( host.hostip == TasmotaHostsList[i].hostip && host.name != TasmotaHostsList[i].name ) {
+                            // just logging
+                            Logger.logTextLnU(DateTime.Now, String.Format("buttonSearchTasmotas_Click: host {0} {1} was renamed to {2}", TasmotaHostsList[i].name, host.hostip, host.name));
+                            textBoxLogger.AppendText(DateTime.Now.ToString() + String.Format(" host {0} {1} was renamed to {2}", TasmotaHostsList[i].name, host.hostip, host.name) + "\r\n");
+                            // remove the renamed device website tab 
+                            this.Invoke(new Action(() => {
+                                String oldTasmotaName = TasmotaHostsList[i].name.Trim();
+                                int ndx = TabExistsNdx(oldTasmotaName);
+                                if ( ndx != -1 ) {
+                                    this.tabControlDevices.TabPages.RemoveAt(ndx);
+                                }
+                            }));
+                            // take over the new device name
+                            TasmotaHostsList[i].name = host.name;
+                            // warn about Telegram command incompatible chars
+                            if ( host.name.IndexOfAny("*.-".ToCharArray()) != -1 ) {
+                                var warningStr = String.Format("Tasmota name '{0}' containing '{1}', is not Telegram command compatible, better rename.", host.name, "*.-");
+                                Logger.logTextLnU(DateTime.Now, warningStr);
+                                textBoxLogger.AppendText(DateTime.Now.ToString() + " " + warningStr + "\r\n");
+                                AutoMessageBox.Show(warningStr, "Note", 5000);
+                            }
+                        }
+                        // a full match between hostListMod and TasmotaHostsList
                         if ( host.name == TasmotaHostsList[i].name && host.hostip == TasmotaHostsList[i].hostip ) {
                             found = true;
                             // a found item is definitely pingable
@@ -434,8 +461,9 @@ namespace GrzTasmotaBot {
                             break;
                         }
                     }
-                    // means, hostListMod has more items then TasmotaHostsList: add it + set pingable
+                    // means, hostListMod has more items than TasmotaHostsList 
                     if ( !found ) {
+                        // add it + set pingable
                         TasmotaHostsList.Add(host);
                         TasmotaHostsList[TasmotaHostsList.Count - 1].pingable = true;
                         TasmotaHostsList[TasmotaHostsList.Count - 1].graph = false;
@@ -813,7 +841,7 @@ namespace GrzTasmotaBot {
             // ping task
             var pingTask = Task.Run(async () => {
                 using ( Ping ping = new Ping() ) {
-                    return await ping.SendPingAsync(ipAddress, 2000);
+                    return await ping.SendPingAsync(ipAddress, 3000);
                 }
             });
             // wait for completion of ping task
@@ -828,6 +856,12 @@ namespace GrzTasmotaBot {
 
         // get all pingable IP adresses in the network, based on the IP from the PC running this app
         async Task<List<host>> SearchActiveIpAddresses(string ipThis) {
+            if ( PING_ACTIVE ) {
+                while ( PING_ACTIVE ) {
+                    await Task.Delay(25);
+                }
+            }
+            PING_ACTIVE = true;
             List<host> hostList = new List<host>();
             // network IP pattern
             string ipBase = ipThis.Substring(0, ipThis.LastIndexOf(".") + 1);  // sample: "10.0.1."
@@ -840,7 +874,7 @@ namespace GrzTasmotaBot {
             // list of ping tasks consumes list of IPs
             var pingTasks = ipList.Select(async ip => {
                 using ( Ping ping = new Ping() ) {
-                    return await ping.SendPingAsync(ip, 2000);
+                    return await ping.SendPingAsync(ip, 3000);
                 }
             });
             // wait for completion of ping tasks, possible performance issue with single task: https://learn.microsoft.com/en-us/dotnet/fundamentals/code-analysis/quality-rules/ca1842
@@ -852,11 +886,18 @@ namespace GrzTasmotaBot {
                 }
             }
             // return a list of pingable hosts
+            PING_ACTIVE = false;
             return hostList;
         }
 
         // refresh pingable status of list of IP adresses
         async Task<List<host>> RefreshIpAddressesStatus(List<host> list) {
+            if ( PING_ACTIVE ) {
+                while ( PING_ACTIVE ) {
+                    await Task.Delay(25);
+                }
+            }
+            PING_ACTIVE = true;
             // reset pingable status
             for ( int i = 0; i < list.Count; i++ ) {
                 list[i].pingable = false;
@@ -865,7 +906,7 @@ namespace GrzTasmotaBot {
             var pingTasks = list.Select(async item => {
                 // one task per ip address
                 using ( Ping ping = new Ping() ) {
-                    return await ping.SendPingAsync(item.hostip, 2000);
+                    return await ping.SendPingAsync(item.hostip, 3000);
                 }
             });
             // wait for completion of ping tasks
@@ -882,6 +923,7 @@ namespace GrzTasmotaBot {
                 }
             }
             // return host list with pingable status update
+            PING_ACTIVE = false;
             return list;
         }
 
@@ -895,6 +937,12 @@ namespace GrzTasmotaBot {
                 if ( ndxStart != -1 && ndxStop != -1 && ndxStop - ndxStart >= 0 ) {
                     tasmotaName = hostList[i].GETstr.Substring(ndxStart, ndxStop - ndxStart).Trim();
                     hostList[i].name = tasmotaName;
+                    if ( tasmotaName.IndexOfAny("*.-".ToCharArray()) != -1 ) {
+                        var warningStr = String.Format("Tasmota name '{0}' containing '{1}', is not Telegram command compatible, better rename.", tasmotaName, "*.-");
+                        Logger.logTextLnU(DateTime.Now, warningStr);
+                        textBoxLogger.AppendText(DateTime.Now.ToString() + " " + warningStr + "\r\n");
+                        AutoMessageBox.Show(warningStr, "Note", 5000);
+                    }
                 }
                 // create Tasmota device type name
                 foreach (var dev in TasmotaSocketsList) {
@@ -1111,7 +1159,7 @@ namespace GrzTasmotaBot {
             MessageSender sender = (MessageSender)message.Chat ?? message.From;
             Logger.logTextLnU(DateTime.Now, "'" + message.Text + "' from: " + sender.Id.ToString());
             this.Invoke(new Action(() => {
-                this.textBoxLogger.AppendText(DateTime.Now.ToString() + " RX '" + message.Text + "' from: " + sender.Id.ToString() + "\r\n");
+                textBoxLogger.AppendText(DateTime.Now.ToString() + " RX '" + message.Text + "' from: " + sender.Id.ToString() + "\r\n");
             }));
 
             // allow whitelist entries only
@@ -1155,7 +1203,7 @@ namespace GrzTasmotaBot {
                     // confirmation for last SetOn or SetOff command
                     case "yes": {
                             this.Invoke(new Action(() => {
-                                this.textBoxLogger.AppendText(DateTime.Now.ToString() + " RX yes from " + sender.Id.ToString() + "\r\n");
+                                textBoxLogger.AppendText(DateTime.Now.ToString() + " RX yes from " + sender.Id.ToString() + "\r\n");
                             }));
                             // exec the confirmed command
                             if ( TelegramConfirmToken.Cmd.Length > 0 ) {
@@ -1181,7 +1229,7 @@ namespace GrzTasmotaBot {
                                     });
                                     // local logger
                                     this.Invoke(new Action(() => {
-                                        this.textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' " + TelegramConfirmToken.Cmd + " " + response + " ' to: " + sender.Id.ToString() + "\r\n");
+                                        textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' " + TelegramConfirmToken.Cmd + " " + response + " ' to: " + sender.Id.ToString() + "\r\n");
                                     }));
                                     // update UI label
                                     this.Invoke(new Action(() => {
@@ -1212,7 +1260,7 @@ namespace GrzTasmotaBot {
                                 Text = TelegramFinalCommands
                             });
                             this.Invoke(new Action(() => {
-                                this.textBoxLogger.AppendText(DateTime.Now.ToString() + " TX '" + TelegramFinalCommands + "' to: " + sender.Id.ToString() + "\r\n");
+                                textBoxLogger.AppendText(DateTime.Now.ToString() + " TX '" + TelegramFinalCommands + "' to: " + sender.Id.ToString() + "\r\n");
                             }));
                             break;
                         }
@@ -1224,7 +1272,7 @@ namespace GrzTasmotaBot {
                                 Text = welcomeMessage
                             });
                             this.Invoke(new Action(() => {
-                                this.textBoxLogger.AppendText(DateTime.Now.ToString() + " TX '" + welcomeMessage + "' to: " + sender.Id.ToString() + "\r\n");
+                                textBoxLogger.AppendText(DateTime.Now.ToString() + " TX '" + welcomeMessage + "' to: " + sender.Id.ToString() + "\r\n");
                             }));
                             break;
                         }
@@ -1235,7 +1283,7 @@ namespace GrzTasmotaBot {
                                 Text = DateTime.Now.ToShortDateString() + " " + DateTime.Now.ToShortTimeString()
                             });
                             this.Invoke(new Action(() => {
-                                this.textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' timestamp ' to: " + sender.Id.ToString() + "\r\n");
+                                textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' timestamp ' to: " + sender.Id.ToString() + "\r\n");
                             }));
                             break;
                         }
@@ -1243,7 +1291,7 @@ namespace GrzTasmotaBot {
                     case "/location": {
                             _Bot.SendLocation(sender, "50.69421", "3.17456");
                             this.Invoke(new Action(() => {
-                                this.textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' location ' to: " + sender.Id.ToString() + "\r\n");
+                                textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' location ' to: " + sender.Id.ToString() + "\r\n");
                             }));
                             break;
                         }
@@ -1258,7 +1306,7 @@ namespace GrzTasmotaBot {
                                     Text = "command  " + message.Text + " not valid"
                                 });
                                 this.Invoke(new Action(() => {
-                                    this.textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' " + "command  " + message.Text + "  not valid" + " ' to: " + sender.Id.ToString() + "\r\n");
+                                    textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' " + "command  " + message.Text + "  not valid" + " ' to: " + sender.Id.ToString() + "\r\n");
                                 }));
                                 Logger.logTextLnU(DateTime.Now, String.Format("unknown command '{0}' from {1}", message.Text, sender.Id.ToString()));
                                 return;
@@ -1269,27 +1317,30 @@ namespace GrzTasmotaBot {
                                 Text = "roger " + teleCmdMatch
                             });
                             this.Invoke(new Action(() => {
-                                this.textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' roger " + teleCmdMatch + "' to: " + sender.Id.ToString() + "\r\n");
+                                textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' roger " + teleCmdMatch + "' to: " + sender.Id.ToString() + "\r\n");
                             }));
                             // parse the received cmd: get device, set it in UI, get command, execute command 
-                            string[] cmdSplit = teleCmdMatch.Split('_');
-                            if ( cmdSplit.Length > 0 ) {
+                            string dev_name = "";
+                            string cmd_name = "";
+                            int idx = teleCmdMatch.LastIndexOf('_');
+                            if ( idx != -1 ) {
+                                dev_name = teleCmdMatch.Substring(0, idx);
+                                cmd_name = teleCmdMatch.Substring(idx + 1);
+                            }
+                            if ( dev_name.Length > 0 && cmd_name.Length > 0 ) {
 
-                                // so far we only know the Telegram friendly name
-                                string teleName = cmdSplit[0];
-
-                                // find index of 'real Tasmota host name' in TasmotaHostsList with teleName as input
-                                int index = TasmotaHostsList.FindIndex(item => item.teleName == teleName);
+                                // find index of 'real Tasmota host name' in TasmotaHostsList with friendly dev_name as input
+                                int index = TasmotaHostsList.FindIndex(item => item.teleName == dev_name);
                                 if ( index == -1 ) {
                                     this.Invoke(new Action(() => {
-                                        this.textBoxLogger.AppendText(DateTime.Now.ToString() + " host not found " + sender.Id.ToString() + "\r\n");
+                                        textBoxLogger.AppendText(DateTime.Now.ToString() + " host not found " + sender.Id.ToString() + "\r\n");
                                     }));
                                     return;
                                 }
                                 // reject command execution, if "show in Telegram" is disabled: should not happen at all
                                 if ( !TasmotaHostsList[index].telegram ) {
                                     this.Invoke(new Action(() => {
-                                        this.textBoxLogger.AppendText(DateTime.Now.ToString() + " host not remote controllable " + sender.Id.ToString() + "\r\n");
+                                        textBoxLogger.AppendText(DateTime.Now.ToString() + " host not remote controllable " + sender.Id.ToString() + "\r\n");
                                     }));
                                     return;
                                 }
@@ -1305,10 +1356,10 @@ namespace GrzTasmotaBot {
                                 }));
 
                                 // obtain device specific command name
-                                MethodInfo commandMatch = TasmotaSocket.methods.FirstOrDefault(item => item.Name.EndsWith(cmdSplit[1]));
+                                MethodInfo commandMatch = TasmotaSocket.methods.FirstOrDefault(item => item.Name.EndsWith(cmd_name));
                                 if ( commandMatch == null ) {
                                     this.Invoke(new Action(() => {
-                                        this.textBoxLogger.AppendText(DateTime.Now.ToString() + "obtain real command name EXCEPTION" + sender.Id.ToString() + "\r\n");
+                                        textBoxLogger.AppendText(DateTime.Now.ToString() + "obtain real command name EXCEPTION" + sender.Id.ToString() + "\r\n");
                                     }));
                                     return;
                                 }
@@ -1378,7 +1429,7 @@ namespace GrzTasmotaBot {
                                                 // get current power value
                                                 response = TasmotaSocket.GetPower(hostIp);
                                                 // local log
-                                                this.textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' " + teleCmdMatch + " PowerGraph to: " + sender.Id.ToString() + "\r\n");
+                                                textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' " + teleCmdMatch + " PowerGraph to: " + sender.Id.ToString() + "\r\n");
                                                 // get image graph as byte array
                                                 byte[] buffer = TasmotaSocket.GetPowerHistory(hostIp, this);
                                                 // send image graph as picture
@@ -1386,7 +1437,7 @@ namespace GrzTasmotaBot {
                                             }));
                                         } catch ( Exception ex ) {
                                             this.Invoke(new Action(() => {
-                                                this.textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' " + teleCmdMatch + " <exception> to: " + sender.Id.ToString() + "\r\n");
+                                                textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' " + teleCmdMatch + " <exception> to: " + sender.Id.ToString() + "\r\n");
                                             }));
                                         }
                                         // set previous power monitoring state
@@ -1414,7 +1465,7 @@ namespace GrzTasmotaBot {
 
                                 // local logger
                                 this.Invoke(new Action(() => {
-                                    this.textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' " + teleCmdMatch + " " + response + " ' to: " + sender.Id.ToString() + "\r\n");
+                                    textBoxLogger.AppendText(DateTime.Now.ToString() + " TX ' " + teleCmdMatch + " " + response + " ' to: " + sender.Id.ToString() + "\r\n");
                                 }));
 
                                 // update UI label
@@ -1935,6 +1986,12 @@ namespace GrzTasmotaBot {
                 list[i].hostip = arr[0]; 
                 list[i].GETstr = "";
                 list[i].name = arr[1];
+                if ( arr[1].IndexOfAny("*.-".ToCharArray()) != -1 ) {
+                var warningStr = String.Format("Tasmota name '{0}' containing '{1}', is not Telegram command compatible, better rename.", arr[1], "*.-");
+                Logger.logTextLnU(DateTime.Now, warningStr);
+                    MainForm.textBoxLogger.AppendText(DateTime.Now.ToString() + " " + warningStr + "\r\n");
+                    AutoMessageBox.Show(warningStr, "Note", 5000);
+                }
                 list[i].type = arr[2];
                 list[i].graph = arr.Count() > 3 ? Boolean.Parse(arr[3]) : false;
                 list[i].telegram = arr.Count() > 4 ? Boolean.Parse(arr[4]) : false;
