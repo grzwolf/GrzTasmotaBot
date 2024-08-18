@@ -357,7 +357,7 @@ namespace GrzTasmotaBot {
             // timerAppStatus
             // 
             this.timerAppStatus.Enabled = true;
-            this.timerAppStatus.Interval = 60000;
+            this.timerAppStatus.Interval = 61000;
             this.timerAppStatus.Tick += new System.EventHandler(this.timerAppStatus_Tick);
             // 
             // MainForm
@@ -409,7 +409,6 @@ namespace GrzTasmotaBot {
         private System.Windows.Forms.GroupBox groupBoxTasmotaSockets;
         private System.Windows.Forms.GroupBox groupBoxLogger;
         private System.Windows.Forms.Button buttonClearLogger;
-        public static System.Windows.Forms.TextBox textBoxLogger;
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanelMain;
         private System.Windows.Forms.GroupBox groupBoxAllTasmotas;
         private System.Windows.Forms.Timer timerTelegramRestart;
@@ -421,6 +420,7 @@ namespace GrzTasmotaBot {
         private System.Windows.Forms.Button buttonClearWattage;
         private System.Windows.Forms.ToolTip toolTipCommon;
         private System.Windows.Forms.CheckBox checkBoxShowInTelegram;
+        public static System.Windows.Forms.TextBox textBoxLogger;
     }
 }
 

@@ -516,7 +516,7 @@ namespace GrzTasmotaBot {
         // app status timer
         private void timerAppStatus_Tick(object sender, EventArgs e) {
             // once per hour or at app start
-            if ( sender == null || DateTime.Now.Minute % 60 == 0 && DateTime.Now.Second < 31 ) {
+            if ( sender == null || DateTime.Now.Minute % 60 == 0 ) {
                 var pingableCount = TasmotaHostsList.Where(item => item != null && item.pingable).Count();
                 Logger.logTextLnU(DateTime.Now, String.Format("App status: Tasmota hosts count={0}\tpingable={1}\tbot alive={2}", TasmotaHostsList.Count, pingableCount, (_Bot != null)));
             }
