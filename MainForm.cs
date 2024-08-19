@@ -323,7 +323,6 @@ namespace GrzTasmotaBot {
             if ( TasmotaHostsList[this.comboBoxTasmotaDevices.SelectedIndex].type == TasmotaDeviceFilter ) {
                 // device is supposed to be pingable
                 if ( TasmotaHostsList[this.comboBoxTasmotaDevices.SelectedIndex].pingable ) {
-                    this.toolStripStatusLabelMain.Text = "";
                     // make pingable device really sure, it might got disconnected after last refresh
                     List<host> list = new List<host> { new host(TasmotaHostsList[this.comboBoxTasmotaDevices.SelectedIndex].hostip, "") };
                     list = await RefreshIpAddressesStatus(list);
@@ -420,7 +419,7 @@ namespace GrzTasmotaBot {
             hostList = GetTasmotaContentHosts(hostList);
 
             // update status bar info
-            this.toolStripStatusLabelMain.Text = "Status: found " + hostList.Count.ToString() + " Tasmota devices";
+            this.toolStripStatusLabelMain.Text = "Status: found " + hostList.Count.ToString() + " Tasmota device" + (hostList.Count != 1 ? "s" : "");
 
             // add tabs according to found Tasmota devices
             List<host> hostListMod = UpdateTasmotaDeviceListAndBrowsertabs(hostList);
@@ -458,6 +457,8 @@ namespace GrzTasmotaBot {
                             found = true;
                             // a found item is definitely pingable
                             TasmotaHostsList[i].pingable = true;
+                            // update host absent counter 
+                            TasmotaHostsList[i].absentCnt = 0;
                             break;
                         }
                     }
@@ -466,6 +467,7 @@ namespace GrzTasmotaBot {
                         // add it + set pingable
                         TasmotaHostsList.Add(host);
                         TasmotaHostsList[TasmotaHostsList.Count - 1].pingable = true;
+                        TasmotaHostsList[TasmotaHostsList.Count - 1].absentCnt = 0;
                         TasmotaHostsList[TasmotaHostsList.Count - 1].graph = false;
                         TasmotaHostsList[TasmotaHostsList.Count - 1].telegram = false;
                     }
@@ -474,6 +476,8 @@ namespace GrzTasmotaBot {
                 // if both list do not deviate from each other, then all hosts are pingable
                 for ( int i = 0; i < TasmotaHostsList.Count; i++ ) {
                     TasmotaHostsList[i].pingable = true;
+                    // update host absent counter 
+                    TasmotaHostsList[i].absentCnt = 0;
                 }
             }
 
@@ -545,10 +549,12 @@ namespace GrzTasmotaBot {
             public bool   pingable; // a device might temprarily not pingable
             public bool   graph;    // show data graph
             public bool   telegram; // propagate device to Telegram
+            public int    absentCnt;// host absent counter to remove host after X-times being absent
             public host(string ip, string GETstr) {
                 this.hostip = ip;
                 this.GETstr = GETstr;
                 this.pingable = false;
+                this.absentCnt = 0;
             }
         }
 
@@ -653,8 +659,33 @@ namespace GrzTasmotaBot {
                         }
                     } else {
                         TasmotaHostsList[i].pingable = false;
-                        this.toolStripStatusLabelMain.Text = "Tasmota device '" + TasmotaHostsList[i].name + "' not available.";
+                        this.toolStripStatusLabelMain.Text = "Tasmota device '" + TasmotaHostsList[i].name + "' not available " + TasmotaHostsList[i].absentCnt.ToString() + "x";
+                        // remove host, if more than 20 times sequentially absent
+                        if ( TasmotaHostsList[i].absentCnt > 20 ) {
+                            // prepare message
+                            var msg = "Tasmota device '" + TasmotaHostsList[i].name + " " + TasmotaHostsList[i].hostip + "' removed after being absent >20 times.";
+                            // delete INI Tasmota section
+                            AppSettings.IniFile ini = new AppSettings.IniFile(System.Windows.Forms.Application.ExecutablePath + ".ini");
+                            ini.IniWriteValue("Tasmota section", null, null);
+                            // remove entry
+                            TasmotaHostsList.RemoveAt(i);
+                            // write Tasmota hosts to INI
+                            for ( int j = 0; j < TasmotaHostsList.Count; j++ ) {
+                                var valueStr = String.Format("{0},{1},{2},{3},{4}", TasmotaHostsList[j].hostip, TasmotaHostsList[j].name, TasmotaHostsList[j].type, TasmotaHostsList[j].graph.ToString(), TasmotaHostsList[j].telegram.ToString());
+                                ini.IniWriteValue("Tasmota section", "host" + j.ToString(), valueStr);
+                            }
+                            // hosts update interval 
+                            ini.IniWriteValue("Tasmota section", "HostsUpdateInterval", Settings.HostsUpdateInterval.ToString());
+                            // logging
+                            this.toolStripStatusLabelMain.Text = msg;
+                            textBoxLogger.AppendText(DateTime.Now.ToString() + " " + msg + "\r\n");
+                            Logger.logTextLnU(DateTime.Now, msg);
+                        }
                     }
+                }
+                // status update
+                if ( this.toolStripStatusLabelMain.Text == "refreshing" ) {
+                    this.toolStripStatusLabelMain.Text = "";
                 }
 
                 // clear Telegram device specific commands 
@@ -898,7 +929,7 @@ namespace GrzTasmotaBot {
                 }
             }
             PING_ACTIVE = true;
-            // reset pingable status
+            // for now reset pingable status
             for ( int i = 0; i < list.Count; i++ ) {
                 list[i].pingable = false;
             }
@@ -915,12 +946,16 @@ namespace GrzTasmotaBot {
             foreach( var r in results ) {
                 // loop argument list
                 for ( int i = 0; i < list.Count; i++ ) {
-                    // find match, note: non pingable IPs provide r.Address being 0.0.0.0
+                    // find match, note: non pingable IPs provide r.Address being 0.0.0.0 or host PC ip
                     if ( r.Address.ToString() == list[i].hostip ) {
                         list[i].pingable = (r.Status == System.Net.NetworkInformation.IPStatus.Success);
                         break;
                     }
                 }
+            }
+            // loop original list to update the host absent counter 
+            for ( int i = 0; i < list.Count; i++ ) {
+                list[i].absentCnt = (list[i].pingable) ? 0 : list[i].absentCnt + 1;
             }
             // return host list with pingable status update
             PING_ACTIVE = false;
@@ -1987,8 +2022,8 @@ namespace GrzTasmotaBot {
                 list[i].GETstr = "";
                 list[i].name = arr[1];
                 if ( arr[1].IndexOfAny("*.-".ToCharArray()) != -1 ) {
-                var warningStr = String.Format("Tasmota name '{0}' containing '{1}', is not Telegram command compatible, better rename.", arr[1], "*.-");
-                Logger.logTextLnU(DateTime.Now, warningStr);
+                    var warningStr = String.Format("Tasmota name '{0}' containing '{1}', is not Telegram command compatible, better rename.", arr[1], "*.-");
+                    Logger.logTextLnU(DateTime.Now, warningStr);
                     MainForm.textBoxLogger.AppendText(DateTime.Now.ToString() + " " + warningStr + "\r\n");
                     AutoMessageBox.Show(warningStr, "Note", 5000);
                 }

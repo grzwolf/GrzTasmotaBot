@@ -42,9 +42,9 @@ a) device types
 Currently only Tasmota socket devices are supported by their basic commands: On, Off and Status.
 The supported devices are listed in the file TasmotaSockets.txt, which could easily be amended.
 
-b) NOUS A1T
+b) NOUS A1T A8T
 
-Since I only own 'NOUS A1T' sockets, there was no further testing of other socket devices.
+Since I only own 'NOUS A1T / A8T' sockets, there was no further testing of other socket devices.
 
 # Build yourself
 Download sources, open project in Visual Studio, build --> profit.

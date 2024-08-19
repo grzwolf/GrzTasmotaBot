@@ -116,8 +116,9 @@ namespace GrzTools {
                 System.IO.StreamWriter lsw = System.IO.File.AppendText(logFileName);
                 lsw.Write(logtxt);
                 lsw.Close();
-            } catch {; }
-            _busy = false;
+            } 
+            catch {;}
+            finally {_busy = false;}
         }
     }
 
